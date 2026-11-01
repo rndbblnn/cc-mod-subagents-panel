@@ -40,7 +40,7 @@ A Claude Code mod: a live panel of **every** subagent beside the chat, drawn as 
 ## Install
 
 ```
-/plugin marketplace add rndbblnn/claude-subagents-panel
+/plugin marketplace add rndbblnn/cc-mod-subagent-view
 /plugin install subagents-panel@rndbblnn-mods
 ```
 
@@ -59,7 +59,7 @@ Pure logic lives in `hooks/model.ts` (unit-tested in `hooks/model.test.ts`); `ho
 - **Agent definitions with a `tools:` allowlist** must list `mcp__subagents-panel__report`, or that agent cannot report (its row then shows only the pulse and current tool).
 - **Message / ETA request / ping**: a toast says when a message was not delivered and why.
 - **Stop does nothing**: stop goes through the `TaskStop` tool; a toast shows the engine's reason when it refuses.
-- The plugin name cannot start with `claude-` (reserved by Claude Code), hence `subagents-panel` in a repo called `claude-subagents-panel`.
+- The plugin name cannot start with `claude-` (reserved by Claude Code), hence the plugin is `subagents-panel`.
 
 ## Credits
 

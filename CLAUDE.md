@@ -13,7 +13,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
 
 ## Gotchas learned building it (2026-11-01)
 - **Plugin names can't start with `claude-`** (reserved). Hence plugin `subagents-panel` in repo
-  `claude-subagents-panel`; marketplace is `rndbblnn-mods`.
+  `cc-mod-subagent-view`; marketplace is `rndbblnn-mods`.
 - `atom({ plugin, key })` must use **string literals**, not a `const P` — the validator's scan
   can't read variables.
 - Hooks on `agent.spawn` / `tool.call` are *gating*: each has `.catch(($, e, next) => next(e))`
@@ -26,8 +26,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
 - Stop uses `$.tool.call({ tool: 'TaskStop', task_id: agentId })` — not documented as a mod
   API; if the engine refuses, the toast says why.
 - Agents with a `tools:` allowlist in `~/.claude/agents/*.md` must list
-  `mcp__subagents-panel__report` (the four of them do as of 2026-11-01).
-- Git remote is HTTPS (SSH push fails on this laptop).
+  `mcp__subagents-panel__report`, or they cannot report.
 
 ## Check
 `claude plugin validate . && claude plugin test .` (20 tests). Live: `claude --plugin-dir .`,
