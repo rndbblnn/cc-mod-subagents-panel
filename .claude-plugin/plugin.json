@@ -6,7 +6,7 @@
     "name": "rndbblnn",
     "url": "https://github.com/rndbblnn"
   },
-  "repository": "https://github.com/rndbblnn/cc-mod-subagent-view",
+  "repository": "https://github.com/rndbblnn/cc-mod-subagents-panel",
   "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
