@@ -378,13 +378,13 @@ export const register: Register = (on, options) => {
                 return (
                   <Box flexDirection="column">
                     {q.previous.map(t => (
-                      <Text dimColor wrap="truncate-end">
-                        {indent}  ✓ {t.text}
+                      <Text wrap="truncate-end">
+                        {indent}  <Text color="green">✓</Text> <Text dimColor>{t.text}</Text>
                       </Text>
                     ))}
                     {q.current && (
                       <Text wrap="truncate-end">
-                        {indent}  <Text color="yellow">▸ {q.current.text}</Text>
+                        {indent}  <Text color="yellow">▸</Text> {q.current.text}
                         {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
                       </Text>
                     )}
