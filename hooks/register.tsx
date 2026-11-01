@@ -15,6 +15,8 @@ import {
   etaLeft,
   glyph,
   progress,
+  prune,
+  stats,
   summary,
   tree,
   type ReportInput,
@@ -86,6 +88,7 @@ async function stopRun($: EngineInterface, run: Run): Promise<string> {
 export const register: Register = (on, options) => {
   const autoOpen = options.autoOpen !== false
   const pingMs = Math.max(0, Number(options.pingSeconds ?? 90)) * 1000
+  const keepMs = Math.max(0, Number(options.keepFinishedSeconds ?? 10)) * 1000
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -126,11 +129,22 @@ export const register: Register = (on, options) => {
     let tick = 0
     $.clock.every(1000, () => {
       void (async () => {
-        const list = await read($, runs)
+        const at = Date.now()
+        let list = await read($, runs)
+        // Finished rows leave `keepFinishedSeconds` after they end.
+        const kept = prune(list, at, keepMs)
+        if (kept.length !== list.length) {
+          list = await update($, runs, rs => prune(rs, at, keepMs))
+          const sel = await read($, selected)
+          if (sel && !list.some(r => keyOf(r) === sel)) {
+            await update($, selected, () => null)
+            await update($, composing, () => false)
+          }
+          await update($, now, () => at)
+        }
         const running = list.filter(r => r.status === 'running').length
         $.ui.status(running ? `⚙ ${running} subagent${running > 1 ? 's' : ''} running · /subagents` : undefined)
         if (!running) return
-        const at = Date.now()
         await update($, now, () => at)
         if (++tick % 5 !== 0) return
         for (const r of dueForPing(list, at, pingMs)) {
@@ -320,14 +334,13 @@ export const register: Register = (on, options) => {
     }
 
     const rows = tree(list)
-    // Each agent takes three lines (header, full-width bar, what it is doing): fit that many.
-    const fit = Math.max(1, Math.floor((room - 1) / 3))
+    // Each agent takes four lines (name, stats, full-width bar, what it is doing): fit that many.
+    const fit = Math.max(1, Math.floor((room - 1) / 4))
     return (
       <Box flexDirection="column">
         <Text dimColor>{list.length ? summary(list) : 'No subagents yet.'}</Text>
         {rows.slice(-fit).map(({ run, depth }) => {
-          const { done, total } = progress(run)
-          const left = etaLeft(run, at)
+          const st = stats(run, at)
           const indent = '  '.repeat(Math.min(depth, 4))
           // 100% of the body: whatever the indent and the two-cell gutter leave.
           const barWidth = Math.max(4, width - indent.length - 2)
@@ -336,13 +349,11 @@ export const register: Register = (on, options) => {
               <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
                 {indent}
                 <Text color={statusColor(run)}>{glyph(run, at)}</Text> <Text bold>{run.type}</Text>
-                <Text dimColor>
-                  {'  '}
-                  {total ? `${done}/${total} · ` : ''}
-                  {clock((run.endedAt ?? at) - run.startedAt)}
-                </Text>
-                {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : ''}
               </Button>
+              <Text wrap="truncate">
+                {indent}  <Text dimColor>{st.text}</Text>
+                {st.eta ? <Text color="cyan"> · {st.eta}</Text> : ''}
+              </Text>
               <Text wrap="truncate">
                 {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
               </Text>

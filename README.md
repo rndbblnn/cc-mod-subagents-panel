@@ -3,16 +3,18 @@
 A Claude Code mod: a live panel of **every** subagent beside the chat, drawn as a tree by parent.
 
 ```
-1 running · 2 finished
-⠹ Explore  2/5 · 1:10 · ETA 1:45
-  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱   (yellow)
+1 running · 1 finished
+⠹ Explore
+  2/5 · 1:10 · ETA 1:45
+  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱   (yellow)
   └ Grep: refresh_token
-✓ Plan  4/4 · 2:31
-  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰   (green)
+✓ Plan
+  4/4 · 2:31
+  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰   (green; leaves after 10 s)
   └ done
 ```
 
-- **Rows** (three lines each): status, agent type, done/total, elapsed and ETA; then a full-width progress bar, yellow while running, green when done, red on failure; (filled from TODOs; a sweeping pulse until the agent reports), done/total, elapsed, ETA, and what it is doing right now (current tool call, else its active TODO).
+- **Rows** (four lines each): status and agent type; done/total, elapsed and ETA; a full-width progress bar, yellow while running, green when done, red on failure; (filled from TODOs; a sweeping pulse until the agent reports), done/total, elapsed, ETA, and what it is doing right now (current tool call, else its active TODO).
 - **ETA**: the agent's own `eta_seconds` estimate, else extrapolated from finished TODOs.
 - **Ordered TODOs**: every subagent is briefed to call `mcp__subagents-panel__report` with its full ordered todo list and ETA. A running agent that stays quiet for `pingSeconds` (default 90) is messaged to report again.
 - **Click a row** (or tab to it + enter) for its detail view: numbered TODOs, plus controls: `m` message the agent, `e` ask for a fresh ETA, `s` stop it, `b` back.
@@ -24,11 +26,12 @@ A Claude Code mod: a live panel of **every** subagent beside the chat, drawn as 
 ## Settings (`/config`, or `~/.claude/settings.json`)
 
 ```json
-{ "pluginConfigs": { "subagents-panel": { "options": { "autoOpen": true, "pingSeconds": 90 } } } }
+{ "pluginConfigs": { "subagents-panel": { "options": { "autoOpen": true, "pingSeconds": 90, "keepFinishedSeconds": 10 } } } }
 ```
 
 - `autoOpen` (default `true`): open the panel when any subagent starts. Self-opening needs a terminal ≥144 columns (≥110 after you have opened it once with `/subagents`); narrower, the status line shows the running count and `/subagents` opens it.
 - `pingSeconds` (default `90`, `0` = off): message an agent that has not reported for this long.
+- `keepFinishedSeconds` (default `10`, `0` = keep): finished, failed or stopped agents leave the panel this long after they end.
 
 ## Install
 

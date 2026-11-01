@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -103,5 +103,24 @@ describe('labels', () => {
     expect(progress(half)).toEqual({ done: 1, total: 2 })
     expect(describeCall('Bash', { command: 'cargo   test' })).toBe('Bash: cargo test')
     expect(describeCall('mcp__srv__do', {})).toBe('srv:do')
+  })
+})
+
+describe('prune', () => {
+  test('finished runs leave after keepMs; running and 0 keep', async () => {
+    const list = [
+      run({ id: 'r', agentId: 'r' }),
+      run({ id: 'old', agentId: 'old', status: 'done', endedAt: 0 }),
+      run({ id: 'new', agentId: 'new', status: 'stopped', endedAt: 5_000 }),
+    ]
+    expect(prune(list, 11_000, 10_000).map(r => r.id)).toEqual(['r', 'new'])
+    expect(prune(list, 11_000, 0).length).toBe(3)
+  })
+})
+
+describe('stats', () => {
+  test('done/total, elapsed and ETA on one line', async () => {
+    const r = run({ todos: [{ text: 'a', status: 'done' }, { text: 'b', status: 'pending' }], etaAt: 75_000 })
+    expect(stats(r, 15_000)).toEqual({ text: '1/2 · 0:15', eta: 'ETA 1:00' })
   })
 })

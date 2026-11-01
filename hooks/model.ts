@@ -158,3 +158,17 @@ export function summary(runs: Run[]): string {
   const done = runs.length - running
   return `${running} running · ${done} finished`
 }
+
+/** Drops finished runs `keepMs` after they ended; 0 keeps them. Running ones always stay. */
+export function prune(runs: Run[], now: number, keepMs: number): Run[] {
+  if (keepMs <= 0) return runs
+  return runs.filter(r => r.status === 'running' || r.endedAt === undefined || now - r.endedAt < keepMs)
+}
+
+/** The stats line: done/total, elapsed, ETA. */
+export function stats(run: Run, now: number): { text: string; eta?: string } {
+  const { done, total } = progress(run)
+  const left = etaLeft(run, now)
+  const text = `${total ? `${done}/${total} · ` : ''}${clock((run.endedAt ?? now) - run.startedAt)}`
+  return { text, eta: left !== undefined ? `ETA ${clock(left)}` : undefined }
+}
