@@ -30,7 +30,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
 - Git remote is HTTPS (SSH push fails on this laptop).
 
 ## Check
-`claude plugin validate . && claude plugin test .` (16 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (18 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
@@ -41,3 +41,8 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
 - **Size to `e.props.bodyColumns`, never `e.viewport.columns`** — viewport is the whole
   terminal, so a docked pane's content sized to it wraps onto extra lines. Rows:
   `e.props.scroll.bodyRows`. Single-line text: `wrap="truncate"`.
+- **`$.session.send` does not throw on failure** — it resolves `{ isDelivered: false, reason }`.
+  Always go through `sendTo()`, which toasts the reason. (The first auto-ping test, 2026-11-01,
+  reached nobody and nothing said so.)
+- Rows sort by `byEta(now)`: running with ETA (longest first), running without, finished.
+  The list fills from the top.

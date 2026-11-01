@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, shortModel, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -79,6 +79,19 @@ describe('tree', () => {
     ])
     expect(rows.map(r => `${r.depth}:${r.run.id}`)).toEqual(['0:o', '0:p', '1:b', '1:c'])
   })
+  test('siblings sort by ETA, longest first; no-ETA then finished below', async () => {
+    const rows = tree(
+      [
+        run({ id: 'short', agentId: 'short', etaAt: 20_000 }),
+        run({ id: 'done', agentId: 'done', status: 'done', endedAt: 5_000 }),
+        run({ id: 'noeta', agentId: 'noeta', startedAt: 1 }),
+        run({ id: 'long', agentId: 'long', etaAt: 90_000 }),
+        run({ id: 'kid', agentId: 'kid', parentId: 'short', etaAt: 99_000 }),
+      ],
+      10_000,
+    )
+    expect(rows.map(r => `${r.depth}:${r.run.id}`)).toEqual(['0:long', '0:short', '1:kid', '0:noeta', '0:done'])
+  })
 })
 
 describe('pings', () => {
@@ -155,5 +168,14 @@ describe('overview', () => {
       run({ id: 'r', todos: [todo('a', 'done'), todo('b', 'in_progress')] }),
     ]
     expect(overview(t, list)).toEqual({ done: 1, failed: 1, stopped: 1, todos: 5, running: 1 })
+  })
+})
+
+describe('shortModel', () => {
+  test('family and version, ids and aliases', async () => {
+    expect(shortModel('claude-haiku-5-5')).toBe('haiku 5.5')
+    expect(shortModel('claude-opus-4-1-20250805')).toBe('opus 4.1')
+    expect(shortModel('claude-sonnet-5')).toBe('sonnet 5')
+    expect(shortModel('haiku')).toBe('haiku')
   })
 })

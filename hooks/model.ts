@@ -109,10 +109,26 @@ export function doing(run: Run): string {
 export type Row = { run: Run; depth: number }
 
 /**
- * Flattens runs into a tree by parent, each level in start order. A run whose
+ * Sibling order: running agents with an ETA, longest remaining first; then running
+ * ones without an ETA, oldest first; then finished ones, latest ended first.
+ */
+export function byEta(now: number) {
+  const rank = (r: Run) => (r.status !== 'running' ? 2 : etaLeft(r, now) === undefined ? 1 : 0)
+  return (a: Run, b: Run): number => {
+    const ra = rank(a)
+    const rb = rank(b)
+    if (ra !== rb) return ra - rb
+    if (ra === 0) return (etaLeft(b, now) ?? 0) - (etaLeft(a, now) ?? 0)
+    if (ra === 1) return a.startedAt - b.startedAt
+    return (b.endedAt ?? 0) - (a.endedAt ?? 0)
+  }
+}
+
+/**
+ * Flattens runs into a tree by parent, siblings sorted by `byEta`. A run whose
  * parent is unknown (finished and pruned, or never seen) hangs off the root.
  */
-export function tree(runs: Run[]): Row[] {
+export function tree(runs: Run[], now = 0): Row[] {
   const ids = new Set(runs.map(r => r.agentId ?? r.id))
   const kids = new Map<string | undefined, Run[]>()
   for (const r of runs) {
@@ -122,7 +138,7 @@ export function tree(runs: Run[]): Row[] {
   const out: Row[] = []
   const seen = new Set<string>()
   const walk = (parent: string | undefined, depth: number) => {
-    for (const r of [...(kids.get(parent) ?? [])].sort((a, b) => a.startedAt - b.startedAt)) {
+    for (const r of [...(kids.get(parent) ?? [])].sort(byEta(now))) {
       const key = r.agentId ?? r.id
       if (seen.has(key)) continue
       seen.add(key)
@@ -204,4 +220,11 @@ export function overview(totals: Totals, list: Run[]): Totals & { running: numbe
   const t = absorb(totals, list.filter(r => r.status !== 'running'))
   const live = list.filter(r => r.status === 'running')
   return { ...t, todos: t.todos + live.reduce((n, r) => n + r.todos.filter(x => x.status === 'done').length, 0), running: live.length }
+}
+
+/** "claude-haiku-5-5" -> "haiku 5.5", "claude-opus-4-1-20250805" -> "opus 4.1"; aliases pass through. */
+export function shortModel(model: string): string {
+  const m = model.replace(/^(?:us\.)?anthropic\./, '').replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/\[.*\]$/, '')
+  const parts = m.match(/^([a-z]+)-(\d+)(?:-(\d+))?/)
+  return parts ? `${parts[1]} ${parts[2]}${parts[3] ? `.${parts[3]}` : ''}` : m
 }

@@ -22,6 +22,7 @@ import {
   currentIndex,
   rowHeight,
   stats,
+  shortModel,
   tree,
   type ReportInput,
 } from './model'
@@ -77,6 +78,26 @@ async function patch($: EngineInterface, agentId: string, fn: (r: Run) => Run): 
   return hit
 }
 
+/**
+ * Sends `text` to a running agent. `$.session.send` does not throw on a failed
+ * delivery, it answers `{ isDelivered: false, reason }`: say so in a toast.
+ */
+async function sendTo($: EngineInterface, run: Run, text: string, what: string, quietOnSuccess = false): Promise<boolean> {
+  if (!run.agentId) return false
+  try {
+    const sent = await $.session.send({ to: { agentId: run.agentId }, text })
+    if (!sent.isDelivered) {
+      await $.ui.toast(`${what} to ${run.type} not delivered: ${sent.reason}`)
+      return false
+    }
+    if (!quietOnSuccess) await $.ui.toast(`${what} sent to ${run.type}`)
+    return true
+  } catch (err) {
+    await $.ui.toast(`${what} to ${run.type} failed: ${err instanceof Error ? err.message : String(err)}`)
+    return false
+  }
+}
+
 async function stopRun($: EngineInterface, run: Run): Promise<string> {
   if (!run.agentId) return 'no agent id to stop'
   try {
@@ -91,9 +112,14 @@ async function stopRun($: EngineInterface, run: Run): Promise<string> {
 }
 
 export const register: Register = (on, options) => {
-  const autoOpen = options.autoOpen !== false
-  const pingMs = Math.max(0, Number(options.pingSeconds ?? 90)) * 1000
-  const keepMs = Math.max(0, Number(options.keepFinishedSeconds ?? 10)) * 1000
+  // Options arrive as set in /config or settings.json: numbers, numeric strings, or unset.
+  const num = (v: unknown, d: number) => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN
+    return Number.isFinite(n) && n >= 0 ? n : d
+  }
+  const autoOpen = options.autoOpen !== false && options.autoOpen !== 'false'
+  const pingMs = num(options.pingSeconds, 90) * 1000
+  const keepMs = num(options.keepFinishedSeconds, 10) * 1000
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -156,11 +182,7 @@ export const register: Register = (on, options) => {
         if (++tick % 5 !== 0) return
         for (const r of dueForPing(list, at, pingMs)) {
           await patch($, r.agentId!, x => ({ ...x, lastPingAt: at }))
-          try {
-            await $.session.send({ to: { agentId: r.agentId! }, text: PING })
-          } catch {
-            // The agent may have just ended; the next tick sees it.
-          }
+          await sendTo($, r, PING, 'Status ping', true)
         }
         // Reconcile with the engine's own view: catches stops and kills we did not see.
         try {
@@ -290,7 +312,7 @@ export const register: Register = (on, options) => {
             <Button key="back" label="← back" hotkey="b" plain onPress={back} />
           </Box>
           <Text bold>
-            {glyph(pick, at)} {pick.type} <Text dimColor>· {pick.model}</Text>
+            {glyph(pick, at)} {pick.type} <Text dimColor> {shortModel(pick.model)}</Text>
           </Text>
           <Text dimColor>{pick.description}</Text>
           <Text dimColor>
@@ -320,7 +342,7 @@ export const register: Register = (on, options) => {
               {Input && (
                 <Button key="msg" label="message" hotkey="m" plain onPress={() => void update($, composing, () => true)} />
               )}
-              <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void $.session.send({ to: { agentId: pick.agentId! }, text: PING })} />
+              <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void sendTo($, pick, PING, 'ETA request')} />
               <Button key="stop" label="stop" hotkey="s" plain onPress={() => void stopRun($, pick)} />
             </Box>
           )}
@@ -334,7 +356,7 @@ export const register: Register = (on, options) => {
               onSubmit={(value: string) => {
                 const text = value.trim()
                 void update($, composing, () => false)
-                if (text) void $.session.send({ to: { agentId: pick.agentId! }, text })
+                if (text) void sendTo($, pick, text, 'Message')
               }}
             />
           )}
@@ -342,16 +364,17 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const rows = tree(list)
+    const rows = tree(list, at)
     // Rows differ in height (the queue): keep the newest that fit the body.
     const shown: typeof rows = []
     const FOOTER = 2
     let used = (list.length ? 0 : 1) + FOOTER
-    for (const row of [...rows].reverse()) {
+    // Sorted longest ETA first: fill from the top, the rest waits below.
+    for (const row of rows) {
       const h = rowHeight(row.run)
       if (used + h > room && shown.length) break
       used += h
-      shown.unshift(row)
+      shown.push(row)
     }
     const o = overview(await read($, totals), list)
     const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
@@ -399,6 +422,7 @@ export const register: Register = (on, options) => {
               <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
                 {indent}
                 <Text color={statusColor(run)}>{glyph(run, at)}</Text> <Text bold>{run.type}</Text>
+                <Text dimColor>  {shortModel(run.model)}</Text>
               </Button>
               <Text wrap="truncate">
                 {indent}  <Text dimColor>{st.text}</Text>
