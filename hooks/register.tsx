@@ -248,8 +248,9 @@ export const register: Register = (on, options) => {
     const list = await read($, runs)
     const at = Math.max(await read($, now), Date.now() - 1000)
     const sel = await read($, selected)
-    const width = e.viewport?.columns ?? 56
-    const room = Math.max(4, (e.viewport?.rows ?? 24) - 4)
+    // The pane's own body, inside its frame, not the terminal (`viewport` is the whole screen).
+    const width = Math.max(12, e.props.bodyColumns ?? 56)
+    const room = Math.max(4, (e.props.scroll?.bodyRows ?? 24) - 1)
 
     const pick = sel ? list.find(r => keyOf(r) === sel) : undefined
     if (pick) {
@@ -274,8 +275,8 @@ export const register: Register = (on, options) => {
             {clock((pick.endedAt ?? at) - pick.startedAt)}
             {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : null}
           </Text>
-          <Text color={barColor(pick)} dimColor={pick.status === 'stopped'}>
-            {bar(pick, at, Math.max(8, width - 4))}
+          <Text color={barColor(pick)} dimColor={pick.status === 'stopped'} wrap="truncate">
+            {bar(pick, at, width)}
           </Text>
           <Text dimColor>{doing(pick)}</Text>
           <Text> </Text>
@@ -328,7 +329,8 @@ export const register: Register = (on, options) => {
           const { done, total } = progress(run)
           const left = etaLeft(run, at)
           const indent = '  '.repeat(Math.min(depth, 4))
-          const barWidth = Math.max(8, width - indent.length - 4)
+          // 100% of the body: whatever the indent and the two-cell gutter leave.
+          const barWidth = Math.max(4, width - indent.length - 2)
           return (
             <Box flexDirection="column">
               <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
@@ -341,11 +343,11 @@ export const register: Register = (on, options) => {
                 </Text>
                 {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : ''}
               </Button>
-              <Text>
+              <Text wrap="truncate">
                 {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
               </Text>
-              <Text dimColor>
-                {indent}  └ {doing(run).slice(0, Math.max(10, width - indent.length - 6))}
+              <Text dimColor wrap="truncate-end">
+                {indent}  └ {doing(run)}
               </Text>
             </Box>
           )

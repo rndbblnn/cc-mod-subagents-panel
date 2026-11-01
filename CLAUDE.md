@@ -30,7 +30,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
 - Git remote is HTTPS (SSH push fails on this laptop).
 
 ## Check
-`claude plugin validate . && claude plugin test .` (9 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (10 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
@@ -38,3 +38,6 @@ An **unasked** `$.ui.open` (from `agent.spawn`, a timer, `session.start`) is onl
 terminal ≥144 columns (≥110 once the person has opened this pane id by hand); narrower, it
 waits undrawn and `isPlaced` is false. So: auto-open falls back to a one-time toast + a
 status line entry ("N subagents running · /subagents"). `/subagents` (asked) seats at any width.
+- **Size to `e.props.bodyColumns`, never `e.viewport.columns`** — viewport is the whole
+  terminal, so a docked pane's content sized to it wraps onto extra lines. Rows:
+  `e.props.scroll.bodyRows`. Single-line text: `wrap="truncate"`.

@@ -39,3 +39,26 @@ test('a spawned agent is briefed, listed, and its todos open on click', async ($
   expect(await ui.find({ type: 'Button', key: 'stop' })).toBeTruthy()
   await ui.unmount()
 })
+
+test('the progress bar spans the pane body exactly, on one line', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'x', description: 'narrow', subagentType: 'Explore' } as never)
+
+  // A narrow pane on a wide terminal: the bar follows the pane, not the screen.
+  const ui = await $.ui.mount({
+    ...PANE,
+    viewport: { columns: 200, rows: 50 },
+    props: { ...PANE.props, bodyColumns: 30 },
+  } as never)
+  const barRow = await ui.find({ type: 'Text', text: /[▰▱]{8,}/ })
+  const cells = (barRow?.text ?? '').match(/[▰▱]+/)?.[0] ?? ''
+  expect(cells.length).toBe(28)
+  expect(barRow?.text).not.toContain('\n')
+  await ui.unmount()
+})
