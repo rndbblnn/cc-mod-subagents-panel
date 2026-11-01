@@ -40,7 +40,7 @@ A Claude Code mod: a live panel of **every** subagent beside the chat, drawn as 
 ## Install
 
 ```
-/plugin marketplace add rndbblnn/cc-mod-subagent-view
+/plugin marketplace add rndbblnn/cc-mod-subagents-panel
 /plugin install subagents-panel@rndbblnn-mods
 ```
 
