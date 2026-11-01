@@ -16,7 +16,7 @@ import {
   glyph,
   progress,
   prune,
-  recent,
+  currentIndex,
   rowHeight,
   stats,
   summary,
@@ -366,31 +366,30 @@ export const register: Register = (on, options) => {
               <Text wrap="truncate">
                 {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
               </Text>
-              {(() => {
-                const q = recent(run)
-                if (!q.previous.length && !q.current) {
-                  return (
-                    <Text dimColor wrap="truncate-end">
-                      {indent}  └ {doing(run)}
-                    </Text>
-                  )
-                }
-                return (
-                  <Box flexDirection="column">
-                    {q.previous.map(t => (
+              {run.todos.length === 0 ? (
+                <Text dimColor wrap="truncate-end">
+                  {indent}  └ {doing(run)}
+                </Text>
+              ) : (
+                <Box flexDirection="column">
+                  {run.todos.map((t, i) =>
+                    i === currentIndex(run) ? (
+                      <Text wrap="truncate-end">
+                        {indent}  <Text color="yellow">▸</Text> <Text color="text">{t.text}</Text>
+                        {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
+                      </Text>
+                    ) : t.status === 'done' ? (
                       <Text wrap="truncate-end">
                         {indent}  <Text color="green">✓</Text> <Text dimColor>{t.text}</Text>
                       </Text>
-                    ))}
-                    {q.current && (
-                      <Text wrap="truncate-end">
-                        {indent}  <Text color="yellow">▸</Text> <Text color="text">{q.current.text}</Text>
-                        {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
+                    ) : (
+                      <Text dimColor wrap="truncate-end">
+                        {indent}  ○ {t.text}
                       </Text>
-                    )}
-                  </Box>
-                )
-              })()}
+                    ),
+                  )}
+                </Box>
+              )}
             </Box>
           )
         })}

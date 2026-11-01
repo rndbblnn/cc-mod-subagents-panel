@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, recent, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -125,22 +125,16 @@ describe('stats', () => {
   })
 })
 
-describe('queue', () => {
+describe('todo list', () => {
   const todo = (text: string, status: 'pending' | 'in_progress' | 'done') => ({ text, status })
-  test('the 3 finished todos before the current one, and the current one', async () => {
-    const r = run({
-      todos: [todo('a', 'done'), todo('b', 'done'), todo('c', 'done'), todo('d', 'done'), todo('e', 'in_progress'), todo('f', 'pending')],
-    })
-    const q = recent(r)
-    expect(q.previous.map(t => t.text)).toEqual(['b', 'c', 'd'])
-    expect(q.current?.text).toBe('e')
+  test('every todo is a line; current is the one in progress', async () => {
+    const r = run({ todos: [todo('a', 'done'), todo('b', 'done'), todo('c', 'in_progress'), todo('d', 'pending')] })
+    expect(currentIndex(r)).toBe(2)
     expect(rowHeight(r)).toBe(7)
   })
   test('between todos the next pending one is current; finished agents have none', async () => {
-    const r = run({ todos: [todo('a', 'done'), todo('b', 'pending')] })
-    expect(recent(r).current?.text).toBe('b')
-    const done = run({ status: 'done', todos: [todo('a', 'done'), todo('b', 'done')] })
-    expect(recent(done)).toEqual({ previous: [todo('a', 'done'), todo('b', 'done')], current: undefined })
+    expect(currentIndex(run({ todos: [todo('a', 'done'), todo('b', 'pending')] }))).toBe(1)
+    expect(currentIndex(run({ status: 'done', todos: [todo('a', 'done')] }))).toBe(-1)
   })
   test('no todos: one activity line', async () => {
     expect(rowHeight(run())).toBe(4)
