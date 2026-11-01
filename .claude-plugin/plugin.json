@@ -1,0 +1,23 @@
+{
+  "name": "subagents-panel",
+  "version": "0.1.0",
+  "description": "A live tree of subagents beside the chat: current tool, ordered TODOs, progress, ETA, and message/stop controls.",
+  "author": { "name": "rndbblnn", "url": "https://github.com/rndbblnn" },
+  "repository": "https://github.com/rndbblnn/claude-subagents-panel",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the panel when a subagent starts",
+      "description": "Open (or bring forward) the Subagents pane whenever any subagent is spawned",
+      "default": true
+    },
+    "pingSeconds": {
+      "type": "number",
+      "title": "Ping quiet agents after (seconds)",
+      "description": "A running subagent that has not reported its TODOs/ETA for this long gets a message asking it to. 0 turns pinging off.",
+      "default": 90
+    }
+  }
+}

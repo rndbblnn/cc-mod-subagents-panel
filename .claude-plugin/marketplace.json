@@ -1,0 +1,11 @@
+{
+  "name": "rndbblnn-mods",
+  "owner": { "name": "rndbblnn" },
+  "plugins": [
+    {
+      "name": "subagents-panel",
+      "source": "./",
+      "description": "A live tree of subagents beside the chat: current tool, ordered TODOs, progress, ETA, and message/stop controls."
+    }
+  ]
+}
