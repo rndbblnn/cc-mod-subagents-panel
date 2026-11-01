@@ -1,6 +1,6 @@
 {
   "name": "subagents-panel",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A live tree of subagents beside the chat: current tool, ordered TODOs, progress, ETA, and message/stop controls.",
   "author": {
     "name": "rndbblnn",

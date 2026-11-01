@@ -116,6 +116,7 @@ describe('labels', () => {
     expect(progress(half)).toEqual({ done: 1, total: 2 })
     expect(describeCall('Bash', { command: 'cargo   test' })).toBe('Bash: cargo test')
     expect(describeCall('mcp__srv__do', {})).toBe('srv:do')
+    expect(describeCall('Bash', { command: 'RUST_LOG=debug FOO="a b" cargo test' })).toBe('Bash: cargo test')
   })
 })
 

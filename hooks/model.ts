@@ -165,7 +165,9 @@ export function describeCall(tool: string, input: Record<string, unknown>): stri
   const pick = ['command', 'file_path', 'pattern', 'url', 'query', 'description', 'prompt']
   const arg = pick.map(k => input[k]).find(v => typeof v === 'string') as string | undefined
   const name = tool.startsWith('mcp__') ? tool.split('__').slice(1).join(':') : tool
-  const short = arg ? arg.replace(/\s+/g, ' ').trim().slice(0, 48) : ''
+  // A command's leading `VAR=value` assignments are noise in a one-line label.
+  const bare = tool === 'Bash' && arg ? arg.replace(/^(?:\s*[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/, '') : arg
+  const short = bare ? bare.replace(/\s+/g, ' ').trim().slice(0, 48) : ''
   return short ? `${name}: ${short}` : name
 }
 
