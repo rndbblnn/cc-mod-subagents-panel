@@ -63,3 +63,20 @@ test('the progress bar spans the pane body exactly, on one line', async ($, on) 
   expect(barRow?.text).not.toContain('\n')
   await ui.unmount()
 })
+
+test('a second spawn of the same agent (a resume) keeps its row and clock', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'x', description: 'first', subagentType: 'general-purpose' } as never)
+  await $.agent.spawn({ prompt: 'x', description: 'resumed', subagentType: 'general-purpose' } as never)
+
+  const ui = await $.ui.mount(PANE)
+  const rows = await ui.findAll({ type: 'Button', text: /general-purpose/ })
+  expect(rows.length).toBe(1)
+  await ui.unmount()
+})

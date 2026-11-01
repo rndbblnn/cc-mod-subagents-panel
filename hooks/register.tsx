@@ -248,7 +248,13 @@ export const register: Register = (on, options) => {
       toolCalls: 0,
       todos: [],
     }
-    await update($, runs, list => [...list.filter(r => keyOf(r) !== keyOf(run)), run].slice(-KEEP))
+    // A spawn for an agent already listed is a resume (a background agent picked up
+    // again): keep its row, clock, todos and nesting; only revive it.
+    await update($, runs, list => {
+      const known = list.find(r => keyOf(r) === keyOf(run))
+      if (known) return list.map(r => (r === known ? { ...revive(r), model: run.model || r.model } : r))
+      return [...list, run].slice(-KEEP)
+    })
     if (autoOpen && !(await openPane($)) && !hinted) {
       hinted = true
       await $.ui.toast('Subagents running: type /subagents to show the panel (terminal too narrow to open it by itself)')
