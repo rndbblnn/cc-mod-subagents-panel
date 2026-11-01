@@ -33,6 +33,11 @@ const KEEP = 100
 
 const keyOf = (r: Run) => r.agentId ?? r.id
 
+/** The bar: yellow while it runs, green once done, red if it failed; stopped draws dim. */
+const barColor = (r: Run) => (r.status === 'done' ? 'green' : r.status === 'failed' ? 'red' : 'yellow')
+const statusColor = (r: Run) =>
+  r.status === 'running' ? 'yellow' : r.status === 'done' ? 'green' : r.status === 'failed' ? 'red' : 'gray'
+
 /** Opens the pane; resolves whether a surface draws it now. */
 async function openPane($: EngineInterface, focus = false): Promise<boolean> {
   await update($, now, () => Date.now())
@@ -264,9 +269,13 @@ export const register: Register = (on, options) => {
             {glyph(pick, at)} {pick.type} <Text dimColor>· {pick.model}</Text>
           </Text>
           <Text dimColor>{pick.description}</Text>
-          <Text>
-            {bar(pick, at, 16)} {total ? `${done}/${total}` : ''}  {clock((pick.endedAt ?? at) - pick.startedAt)}
-            {left !== undefined ? <Text color="cyan">  ETA {clock(left)}</Text> : null}
+          <Text dimColor>
+            {total ? `${done}/${total} · ` : ''}
+            {clock((pick.endedAt ?? at) - pick.startedAt)}
+            {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : null}
+          </Text>
+          <Text color={barColor(pick)} dimColor={pick.status === 'stopped'}>
+            {bar(pick, at, Math.max(8, width - 4))}
           </Text>
           <Text dimColor>{doing(pick)}</Text>
           <Text> </Text>
@@ -310,29 +319,34 @@ export const register: Register = (on, options) => {
     }
 
     const rows = tree(list)
-    const nameW = Math.max(10, Math.min(22, width - 34))
+    // Each agent takes three lines (header, full-width bar, what it is doing): fit that many.
+    const fit = Math.max(1, Math.floor((room - 1) / 3))
     return (
       <Box flexDirection="column">
         <Text dimColor>{list.length ? summary(list) : 'No subagents yet.'}</Text>
-        {rows.slice(-room).map(({ run, depth }) => {
+        {rows.slice(-fit).map(({ run, depth }) => {
           const { done, total } = progress(run)
           const left = etaLeft(run, at)
           const indent = '  '.repeat(Math.min(depth, 4))
-          const name = `${indent}${run.type}`.slice(0, nameW).padEnd(nameW)
-          const color =
-            run.status === 'running' ? 'cyan' : run.status === 'done' ? 'green' : run.status === 'failed' ? 'red' : 'yellow'
+          const barWidth = Math.max(8, width - indent.length - 4)
           return (
             <Box flexDirection="column">
               <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
-                <Text color={color}>{glyph(run, at)}</Text> {name} {bar(run, at, 8)}
-                <Text dimColor> {total ? `${done}/${total} ` : ''}{clock((run.endedAt ?? at) - run.startedAt)}</Text>
-                {left !== undefined ? <Text color="cyan"> ~{clock(left)}</Text> : ''}
-              </Button>
-              {run.status === 'running' && (
+                {indent}
+                <Text color={statusColor(run)}>{glyph(run, at)}</Text> <Text bold>{run.type}</Text>
                 <Text dimColor>
-                  {indent}  └ {doing(run).slice(0, Math.max(10, width - indent.length - 6))}
+                  {'  '}
+                  {total ? `${done}/${total} · ` : ''}
+                  {clock((run.endedAt ?? at) - run.startedAt)}
                 </Text>
-              )}
+                {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : ''}
+              </Button>
+              <Text>
+                {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
+              </Text>
+              <Text dimColor>
+                {indent}  └ {doing(run).slice(0, Math.max(10, width - indent.length - 6))}
+              </Text>
             </Box>
           )
         })}
