@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="260" viewBox="0 0 900 260">
+<rect width="900" height="260" rx="16" fill="#0d1117"/>
+<rect x="0.5" y="0.5" width="899" height="259" rx="16" fill="none" stroke="#30363d"/>
+<text x="48" y="78" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="40" font-weight="800" fill="#e6edf3" letter-spacing="-1">subagents<tspan fill="#e5c07b">-</tspan>panel</text>
+<text x="50" y="112" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="15" fill="#8b949e">every Claude Code subagent, live, beside the chat</text>
+<text x="50" y="150" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e"><tspan fill="#e5c07b">▸</tspan> plans · progress · ETA · tokens · nesting</text>
+<text x="50" y="174" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e"><tspan fill="#e5c07b">▸</tspan> ~840 lines · 0 deps · no network</text>
+<text x="50" y="214" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">/plugin install subagents-panel@rndbblnn-mods</text>
+<g transform="translate(600,52)">
+<text x="0" y="0" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="15" fill="#e5c07b" font-weight="700">⠼</text>
+<text x="20" y="0" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="15" fill="#3fb950" font-weight="700">Explore</text>
+<text x="95.69999999999999" y="0" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">haiku 5.5</text>
+<text x="20" y="22" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">2/4 · 0:41 · <tspan fill="#56b6c2">ETA 0:22</tspan> · 31k</text>
+<rect x="20" y="34" width="250" height="5" rx="2.5" fill="#30363d"/>
+<rect x="20" y="34" width="125" height="5" rx="2.5" fill="#e5c07b"/>
+<text x="20" y="60" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#3fb950">✓</text>
+<text x="38" y="60" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">Scan route handlers</text>
+<text x="20" y="80" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#3fb950">✓</text>
+<text x="38" y="80" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">Check middleware</text>
+<text x="20" y="100" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#e5c07b">▸</text>
+<text x="38" y="100" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#e6edf3">Summarize findings</text>
+<text x="20" y="120" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">○</text>
+<text x="38" y="120" font-family="ui-monospace,SFMono-Regular,'JetBrains Mono',Menlo,Consolas,monospace" font-size="13" fill="#8b949e">Report</text>
+</g>
+<line x1="560" y1="40" x2="560" y2="220" stroke="#30363d"/>
+</svg>
