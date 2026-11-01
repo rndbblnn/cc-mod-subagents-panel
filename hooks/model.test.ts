@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, compact, shortModel, kidsOf, slotOf, blockHeight, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -136,7 +136,7 @@ describe('stats', () => {
   test('done/total, elapsed and ETA on one line', async () => {
     const r = run({ todos: [{ text: 'a', status: 'done' }, { text: 'b', status: 'pending' }], etaAt: 75_000 })
     expect(stats(r, 15_000)).toEqual({ text: '1/2 · 0:15', eta: 'ETA 1:00', tokens: undefined })
-    expect(stats({ ...r, tokens: 38_568 }, 15_000).tokens).toBe('39k tokens')
+    expect(stats({ ...r, tokens: 38_568 }, 15_000).tokens).toBe('39k')
     expect([compact(950), compact(4_250), compact(38_568), compact(1_234_567)]).toEqual(['950', '4.3k', '39k', '1.2M'])
   })
 })
@@ -197,5 +197,21 @@ describe('nesting', () => {
     const kids = kidsOf([parent, kid, orphan], 0)
     expect((kids.get(undefined) ?? []).map(r => r.id).sort()).toEqual(['o', 'p'])
     expect(blockHeight(parent, kids)).toBe(6 + 4)
+  })
+})
+
+describe('turn end', () => {
+  const todo = (text: string, status: 'pending' | 'in_progress' | 'done') => ({ text, status })
+  test('a parent waiting on a running child keeps running; todos are never faked', async () => {
+    const parent = run({ id: 'p', agentId: 'p', todos: [todo('a', 'done'), todo('b', 'in_progress'), todo('c', 'pending')] })
+    const child = run({ id: 'k', agentId: 'k', parentId: 'p' })
+    expect(finishTurn(parent, 'answer', 9, [parent, child]).status).toBe('running')
+    const ended = finishTurn(parent, 'answer', 9, [parent])
+    expect(ended.status).toBe('done')
+    expect(ended.todos).toEqual(parent.todos)
+  })
+  test('activity revives done/failed, never stopped', async () => {
+    expect(revive(run({ status: 'done', endedAt: 5 })).status).toBe('running')
+    expect(revive(run({ status: 'stopped', endedAt: 5 })).status).toBe('stopped')
   })
 })

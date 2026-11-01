@@ -198,7 +198,7 @@ export function stats(run: Run, now: number): { text: string; eta?: string; toke
   return {
     text,
     eta: left !== undefined ? `ETA ${clock(left)}` : undefined,
-    tokens: run.tokens ? `${compact(run.tokens)} tokens` : undefined,
+    tokens: run.tokens ? compact(run.tokens) : undefined,
   }
 }
 
@@ -270,4 +270,22 @@ export function blockHeight(run: Run, kids: Map<string | undefined, Run[]>, seen
   if (seen.has(key)) return 0
   seen.add(key)
   return rowHeight(run) + (kids.get(key) ?? []).reduce((n, k) => n + blockHeight(k, kids, seen), 0)
+}
+
+/**
+ * A subagent's turn ended. It is finished unless one of its own children still runs:
+ * an agent that ends a turn to wait for a background child resumes when the child
+ * reports. Todos stay as the agent last reported them; a turn's end proves nothing about them.
+ */
+export function finishTurn(run: Run, reason: string, at: number, list: Run[]): Run {
+  if (run.status !== 'running') return run
+  const me = run.agentId ?? run.id
+  const waiting = list.some(r => r.parentId === me && r.status === 'running')
+  if (waiting) return { ...run, currentTool: undefined }
+  return { ...run, status: reason === 'answer' ? 'done' : 'failed', endedAt: at, currentTool: undefined }
+}
+
+/** Activity from an agent marked done or failed means its turn resumed: running again. Stopped stays stopped. */
+export function revive(run: Run): Run {
+  return run.status === 'done' || run.status === 'failed' ? { ...run, status: 'running', endedAt: undefined } : run
 }

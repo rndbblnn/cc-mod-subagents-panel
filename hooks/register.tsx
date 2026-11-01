@@ -24,6 +24,8 @@ import {
   stats,
   compact,
   shortModel,
+  finishTurn,
+  revive,
   kidsOf,
   slotOf,
   blockHeight,
@@ -257,7 +259,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: REPORT_TOOL }, async ($, e) => {
     const agentId = e.agentId
     if (!agentId) return { result: 'ignored: only subagents report to the panel' }
-    const hit = await patch($, agentId, r => applyReport(r, e as unknown as ReportInput, Date.now()))
+    const hit = await patch($, agentId, r => applyReport(revive(r), e as unknown as ReportInput, Date.now()))
     return { result: hit ? 'ok' : `ignored: no panel row for agent ${agentId}` }
   }).catch(() => ({ result: 'ok (panel update failed; carry on)' }))
 
@@ -266,7 +268,7 @@ export const register: Register = (on, options) => {
     const agentId = e.agentId
     if (!agentId || e.tool === REPORT_TOOL) return next(e)
     const label = describeCall(e.tool, e as unknown as Record<string, unknown>)
-    await patch($, agentId, r => ({ ...r, currentTool: label, toolCalls: r.toolCalls + 1 }))
+    await patch($, agentId, r => ({ ...revive(r), currentTool: label, toolCalls: r.toolCalls + 1 }))
     try {
       return await next(e)
     } finally {
@@ -281,7 +283,7 @@ export const register: Register = (on, options) => {
     if (e.agentId && u) {
       const tokens =
         (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)
-      if (tokens > 0) await patch($, e.agentId, r => ({ ...r, tokens }))
+      if (tokens > 0) await patch($, e.agentId, r => ({ ...revive(r), tokens }))
     }
     return result
   })
@@ -289,17 +291,9 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId) {
-      await patch($, e.agentId, r =>
-        r.status !== 'running'
-          ? r
-          : {
-              ...r,
-              status: e.reason === 'answer' ? 'done' : 'failed',
-              endedAt: Date.now(),
-              currentTool: undefined,
-              todos: e.reason === 'answer' ? r.todos.map(t => ({ ...t, status: 'done' as const })) : r.todos,
-            },
-      )
+      const at = Date.now()
+      const list = await read($, runs)
+      await patch($, e.agentId, r => finishTurn(r, e.reason, at, list))
     }
     return done
   })
@@ -338,7 +332,7 @@ export const register: Register = (on, options) => {
             {total ? `${done}/${total} · ` : ''}
             {clock((pick.endedAt ?? at) - pick.startedAt)}
             {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : null}
-            {pick.tokens ? <Text dimColor> · {compact(pick.tokens)} tokens</Text> : null}
+            {pick.tokens ? <Text dimColor> · {compact(pick.tokens)}</Text> : null}
           </Text>
           <Text color={barColor(pick)} dimColor={pick.status === 'stopped'} wrap="truncate">
             {bar(pick, at, width)}
