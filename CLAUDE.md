@@ -30,7 +30,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
 - Git remote is HTTPS (SSH push fails on this laptop).
 
 ## Check
-`claude plugin validate . && claude plugin test .` (18 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (20 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
@@ -46,3 +46,6 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
   reached nobody and nothing said so.)
 - Rows sort by `byEta(now)`: running with ETA (longest first), running without, finished.
   The list fills from the top.
+- Nesting: at `agent.spawn` the child records the parent's current todo (`parentTodo`);
+  the list renders recursively (`block()`), each child under that todo (`slotOf`), and
+  fits whole root blocks (`blockHeight`) top first.

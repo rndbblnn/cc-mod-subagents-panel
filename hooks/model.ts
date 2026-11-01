@@ -228,3 +228,33 @@ export function shortModel(model: string): string {
   const parts = m.match(/^([a-z]+)-(\d+)(?:-(\d+))?/)
   return parts ? `${parts[1]} ${parts[2]}${parts[3] ? `.${parts[3]}` : ''}` : m
 }
+
+/** Children by parent key (undefined = roots), each list sorted by `byEta`. Unknown parents count as roots. */
+export function kidsOf(runs: Run[], now: number): Map<string | undefined, Run[]> {
+  const ids = new Set(runs.map(r => r.agentId ?? r.id))
+  const out = new Map<string | undefined, Run[]>()
+  for (const r of runs) {
+    const p = r.parentId && ids.has(r.parentId) && r.parentId !== (r.agentId ?? r.id) ? r.parentId : undefined
+    out.set(p, [...(out.get(p) ?? []), r])
+  }
+  for (const [k, v] of out) out.set(k, v.sort(byEta(now)))
+  return out
+}
+
+/**
+ * Where a child is drawn in its parent's block: under the todo it was spawned from
+ * (matched by text), else under the parent's current todo, else after the list (-1).
+ */
+export function slotOf(parent: Run, kid: Run): number {
+  const at = kid.parentTodo ? parent.todos.findIndex(t => t.text === kid.parentTodo) : -1
+  if (at >= 0) return at
+  return parent.todos.length ? currentIndex(parent) : -1
+}
+
+/** Lines a run's block takes with every descendant drawn inside it. */
+export function blockHeight(run: Run, kids: Map<string | undefined, Run[]>, seen = new Set<string>()): number {
+  const key = run.agentId ?? run.id
+  if (seen.has(key)) return 0
+  seen.add(key)
+  return rowHeight(run) + (kids.get(key) ?? []).reduce((n, k) => n + blockHeight(k, kids, seen), 0)
+}

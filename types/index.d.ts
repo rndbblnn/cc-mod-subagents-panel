@@ -11,6 +11,8 @@ export type Run = {
   agentId?: string
   /** The spawning agent's id; absent for the main session. */
   parentId?: string
+  /** The parent's current todo when this agent was spawned: it is drawn under that todo. */
+  parentTodo?: string
   type: string
   description: string
   model: string

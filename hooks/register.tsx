@@ -23,6 +23,9 @@ import {
   rowHeight,
   stats,
   shortModel,
+  kidsOf,
+  slotOf,
+  blockHeight,
   tree,
   type ReportInput,
 } from './model'
@@ -227,10 +230,13 @@ export const register: Register = (on, options) => {
     const started = await next(briefed)
     if (started.deny !== undefined) return started
 
+    const parent = e.parentAgentId ? (await read($, runs)).find(r => r.agentId === e.parentAgentId) : undefined
+    const parentCur = parent ? currentIndex(parent) : -1
     const run: Run = {
       id: started.agentId ?? e.tool_use_id,
       agentId: started.agentId,
       parentId: e.parentAgentId,
+      parentTodo: parent && parentCur >= 0 ? parent.todos[parentCur].text : undefined,
       type: e.subagentType || 'agent',
       description: e.description,
       model: started.model,
@@ -364,17 +370,70 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const rows = tree(list, at)
-    // Rows differ in height (the queue): keep the newest that fit the body.
-    const shown: typeof rows = []
+    const kids = kidsOf(list, at)
+    const roots = kids.get(undefined) ?? []
+    // Blocks differ in height (todos, nested children): keep the roots that fit, top first.
+    const shown: Run[] = []
     const FOOTER = 2
     let used = (list.length ? 0 : 1) + FOOTER
-    // Sorted longest ETA first: fill from the top, the rest waits below.
-    for (const row of rows) {
-      const h = rowHeight(row.run)
+    for (const r of roots) {
+      const h = blockHeight(r, kids)
       if (used + h > room && shown.length) break
       used += h
-      shown.push(row)
+      shown.push(r)
+    }
+    // One agent's block: header, stats, bar, todos; each child sits under the todo that launched it.
+    const block = (run: Run, depth: number, seen: Set<string>): JSX.Element => {
+      seen.add(keyOf(run))
+      const st = stats(run, at)
+      const indent = '  '.repeat(Math.min(depth, 6))
+      // 100% of the body: whatever the indent and the two-cell gutter leave.
+      const barWidth = Math.max(4, width - indent.length - 2)
+      const mine = (kids.get(keyOf(run)) ?? []).filter(k => !seen.has(keyOf(k)))
+      const under = (slot: number) => mine.filter(k => slotOf(run, k) === slot).map(k => block(k, depth + 2, seen))
+      const cur = currentIndex(run)
+      return (
+        <Box flexDirection="column">
+          <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
+            {indent}
+            <Text color={statusColor(run)}>{glyph(run, at)}</Text> <Text bold>{run.type}</Text>
+            <Text dimColor>  {shortModel(run.model)}</Text>
+          </Button>
+          <Text wrap="truncate">
+            {indent}  <Text dimColor>{st.text}</Text>
+            {st.eta ? <Text color="cyan"> · {st.eta}</Text> : ''}
+          </Text>
+          <Text wrap="truncate">
+            {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
+          </Text>
+          {run.todos.length === 0 ? (
+            <Text dimColor wrap="truncate-end">
+              {indent}  └ {doing(run)}
+            </Text>
+          ) : (
+            run.todos.map((t, i) => (
+              <Box flexDirection="column">
+                {i === cur ? (
+                  <Text wrap="truncate-end">
+                    {indent}  <Text color="yellow">▸</Text> <Text color="text">{t.text}</Text>
+                    {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
+                  </Text>
+                ) : t.status === 'done' ? (
+                  <Text wrap="truncate-end">
+                    {indent}  <Text color="green">✓</Text> <Text dimColor>{t.text}</Text>
+                  </Text>
+                ) : (
+                  <Text dimColor wrap="truncate-end">
+                    {indent}  ○ {t.text}
+                  </Text>
+                )}
+                {under(i)}
+              </Box>
+            ))
+          )}
+          {under(-1)}
+        </Box>
+      )
     }
     const o = overview(await read($, totals), list)
     const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
@@ -412,52 +471,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {list.length === 0 && <Text dimColor>No subagents yet.</Text>}
-        {shown.map(({ run, depth }) => {
-          const st = stats(run, at)
-          const indent = '  '.repeat(Math.min(depth, 4))
-          // 100% of the body: whatever the indent and the two-cell gutter leave.
-          const barWidth = Math.max(4, width - indent.length - 2)
-          return (
-            <Box flexDirection="column">
-              <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
-                {indent}
-                <Text color={statusColor(run)}>{glyph(run, at)}</Text> <Text bold>{run.type}</Text>
-                <Text dimColor>  {shortModel(run.model)}</Text>
-              </Button>
-              <Text wrap="truncate">
-                {indent}  <Text dimColor>{st.text}</Text>
-                {st.eta ? <Text color="cyan"> · {st.eta}</Text> : ''}
-              </Text>
-              <Text wrap="truncate">
-                {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
-              </Text>
-              {run.todos.length === 0 ? (
-                <Text dimColor wrap="truncate-end">
-                  {indent}  └ {doing(run)}
-                </Text>
-              ) : (
-                <Box flexDirection="column">
-                  {run.todos.map((t, i) =>
-                    i === currentIndex(run) ? (
-                      <Text wrap="truncate-end">
-                        {indent}  <Text color="yellow">▸</Text> <Text color="text">{t.text}</Text>
-                        {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
-                      </Text>
-                    ) : t.status === 'done' ? (
-                      <Text wrap="truncate-end">
-                        {indent}  <Text color="green">✓</Text> <Text dimColor>{t.text}</Text>
-                      </Text>
-                    ) : (
-                      <Text dimColor wrap="truncate-end">
-                        {indent}  ○ {t.text}
-                      </Text>
-                    ),
-                  )}
-                </Box>
-              )}
-            </Box>
-          )
-        })}
+        {shown.map(r => block(r, 0, new Set()))}
         {footer}
       </Box>
     )

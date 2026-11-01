@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, shortModel, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, shortModel, kidsOf, slotOf, blockHeight, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -177,5 +177,22 @@ describe('shortModel', () => {
     expect(shortModel('claude-opus-4-1-20250805')).toBe('opus 4.1')
     expect(shortModel('claude-sonnet-5')).toBe('sonnet 5')
     expect(shortModel('haiku')).toBe('haiku')
+  })
+})
+
+describe('nesting', () => {
+  const todo = (text: string, status: 'pending' | 'in_progress' | 'done') => ({ text, status })
+  const parent = run({ id: 'p', agentId: 'p', todos: [todo('plan', 'done'), todo('delegate', 'in_progress'), todo('apply', 'pending')] })
+  test('a child sits under the todo it was spawned from, else the current one', async () => {
+    expect(slotOf(parent, run({ id: 'k', parentId: 'p', parentTodo: 'plan' }))).toBe(0)
+    expect(slotOf(parent, run({ id: 'k', parentId: 'p' }))).toBe(1)
+    expect(slotOf(run({ id: 'q' }), run({ id: 'k', parentId: 'q' }))).toBe(-1)
+  })
+  test('block height counts nested children; unknown parents are roots', async () => {
+    const kid = run({ id: 'k', agentId: 'k', parentId: 'p', todos: [todo('scan', 'in_progress')] })
+    const orphan = run({ id: 'o', agentId: 'o', parentId: 'gone' })
+    const kids = kidsOf([parent, kid, orphan], 0)
+    expect((kids.get(undefined) ?? []).map(r => r.id).sort()).toEqual(['o', 'p'])
+    expect(blockHeight(parent, kids)).toBe(6 + 4)
   })
 })

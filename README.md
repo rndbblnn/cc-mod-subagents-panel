@@ -17,7 +17,7 @@ A Claude Code mod: a live panel of **every** subagent beside the chat, drawn as 
 ✓ 6 agents done  ·  ▰ 31 tasks done  ·  ⠹ 1 running
 ```
 
-- **Rows** (sorted by ETA, longest first; then agents without an ETA; finished last; children under their parent): status, agent type and model; done/total, elapsed and ETA; a full-width progress bar; then every todo in order — ✓ done (green), ▸ current (yellow marker, with its live tool call), ○ pending, yellow while running, green when done, red on failure; (filled from TODOs; a sweeping pulse until the agent reports), done/total, elapsed, ETA, and what it is doing right now (current tool call, else its active TODO).
+- **Rows** (sorted by ETA, longest first; then agents without an ETA; finished last; child agents drawn under the parent todo that launched them): status, agent type and model; done/total, elapsed and ETA; a full-width progress bar; then every todo in order — ✓ done (green), ▸ current (yellow marker, with its live tool call), ○ pending, yellow while running, green when done, red on failure; (filled from TODOs; a sweeping pulse until the agent reports), done/total, elapsed, ETA, and what it is doing right now (current tool call, else its active TODO).
 - **Footer**: session overview pinned to the bottom — agents done, tasks done, running, and failures/stops when any. Counts survive the rows leaving the list.
 - **ETA**: the agent's own `eta_seconds` estimate, else extrapolated from finished TODOs.
 - **Ordered TODOs**: every subagent is briefed to call `mcp__subagents-panel__report` with its full ordered todo list and ETA. A running agent that stays quiet for `pingSeconds` (default 90) is messaged to report again.
