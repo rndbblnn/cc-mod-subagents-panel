@@ -41,7 +41,7 @@ const statusColor = (r: Run) =>
 /** Opens the pane; resolves whether a surface draws it now. */
 async function openPane($: EngineInterface, focus = false): Promise<boolean> {
   await update($, now, () => Date.now())
-  const opened = await $.ui.open({ id: PANE, title: TITLE, columns: 56, ...(focus ? { focus: true as const } : {}) })
+  const opened = await $.ui.open({ id: PANE, title: TITLE, columns: 56, backgroundColor: 'transparent', ...(focus ? { focus: true as const } : {}) })
   return opened.isPlaced
 }
 
