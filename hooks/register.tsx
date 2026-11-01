@@ -384,7 +384,7 @@ export const register: Register = (on, options) => {
                     ))}
                     {q.current && (
                       <Text wrap="truncate-end">
-                        {indent}  <Text color="yellow">▸</Text> {q.current.text}
+                        {indent}  <Text color="yellow">▸</Text> <Text color="text">{q.current.text}</Text>
                         {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
                       </Text>
                     )}
