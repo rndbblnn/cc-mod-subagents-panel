@@ -16,6 +16,8 @@ import {
   glyph,
   progress,
   prune,
+  recent,
+  rowHeight,
   stats,
   summary,
   tree,
@@ -334,12 +336,19 @@ export const register: Register = (on, options) => {
     }
 
     const rows = tree(list)
-    // Each agent takes four lines (name, stats, full-width bar, what it is doing): fit that many.
-    const fit = Math.max(1, Math.floor((room - 1) / 4))
+    // Rows differ in height (the queue): keep the newest that fit the body.
+    const shown: typeof rows = []
+    let used = 1
+    for (const row of [...rows].reverse()) {
+      const h = rowHeight(row.run)
+      if (used + h > room && shown.length) break
+      used += h
+      shown.unshift(row)
+    }
     return (
       <Box flexDirection="column">
         <Text dimColor>{list.length ? summary(list) : 'No subagents yet.'}</Text>
-        {rows.slice(-fit).map(({ run, depth }) => {
+        {shown.map(({ run, depth }) => {
           const st = stats(run, at)
           const indent = '  '.repeat(Math.min(depth, 4))
           // 100% of the body: whatever the indent and the two-cell gutter leave.
@@ -357,9 +366,31 @@ export const register: Register = (on, options) => {
               <Text wrap="truncate">
                 {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
               </Text>
-              <Text dimColor wrap="truncate-end">
-                {indent}  └ {doing(run)}
-              </Text>
+              {(() => {
+                const q = recent(run)
+                if (!q.previous.length && !q.current) {
+                  return (
+                    <Text dimColor wrap="truncate-end">
+                      {indent}  └ {doing(run)}
+                    </Text>
+                  )
+                }
+                return (
+                  <Box flexDirection="column">
+                    {q.previous.map(t => (
+                      <Text dimColor wrap="truncate-end">
+                        {indent}  ✓ {t.text}
+                      </Text>
+                    ))}
+                    {q.current && (
+                      <Text wrap="truncate-end">
+                        {indent}  <Text color="yellow">▸ {q.current.text}</Text>
+                        {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
+                      </Text>
+                    )}
+                  </Box>
+                )
+              })()}
             </Box>
           )
         })}

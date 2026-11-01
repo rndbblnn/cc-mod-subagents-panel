@@ -172,3 +172,25 @@ export function stats(run: Run, now: number): { text: string; eta?: string } {
   const text = `${total ? `${done}/${total} · ` : ''}${clock((run.endedAt ?? now) - run.startedAt)}`
   return { text, eta: left !== undefined ? `ETA ${clock(left)}` : undefined }
 }
+
+/**
+ * The work queue a row shows: up to `n` finished todos before the current one, and
+ * the current one (in progress, else the next pending while the agent runs).
+ */
+export function recent(run: Run, n = 3): { previous: Todo[]; current?: Todo } {
+  const at = run.todos.findIndex(t => t.status === 'in_progress')
+  const next = run.status === 'running' ? run.todos.findIndex(t => t.status === 'pending') : -1
+  const cur = at >= 0 ? at : next
+  const before = cur >= 0 ? run.todos.slice(0, cur) : run.todos
+  return {
+    previous: before.filter(t => t.status === 'done').slice(-n),
+    current: cur >= 0 ? run.todos[cur] : undefined,
+  }
+}
+
+/** Lines a row takes: name, stats, bar, then the queue (or one activity line). */
+export function rowHeight(run: Run): number {
+  const q = recent(run)
+  const queue = q.previous.length + (q.current ? 1 : 0)
+  return 3 + (queue || 1)
+}
