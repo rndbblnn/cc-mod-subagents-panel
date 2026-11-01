@@ -29,6 +29,9 @@ export type Run = {
   lastPingAt?: number
 }
 
+/** Session totals of agents that already left the list. */
+export type Totals = { done: number; failed: number; stopped: number; todos: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'subagents-panel': {
@@ -39,6 +42,8 @@ declare module 'claude-code' {
       composing: Shaped<boolean>
       /** The panel's clock, ticked each second while something runs. */
       now: Shaped<number>
+      /** Finished agents and their done todos, kept after their rows leave. */
+      totals: Shaped<Totals>
     }
   }
 }

@@ -1,5 +1,5 @@
 // Pure logic for the panel: no `$`, so it is unit-tested directly.
-import type { Run, Todo, TodoStatus } from '../types'
+import type { Run, Todo, TodoStatus, Totals } from '../types'
 
 export const REPORT_TOOL = 'mcp__subagents-panel__report'
 
@@ -183,4 +183,25 @@ export function currentIndex(run: Run): number {
 /** Lines a row takes: name, stats, bar, then every todo (or one activity line). */
 export function rowHeight(run: Run): number {
   return 3 + Math.max(1, run.todos.length)
+}
+
+export const NO_TOTALS: Totals = { done: 0, failed: 0, stopped: 0, todos: 0 }
+
+/** Folds runs leaving the list into the session totals (running ones are never removed). */
+export function absorb(totals: Totals, removed: Run[]): Totals {
+  const t = { ...totals }
+  for (const r of removed) {
+    if (r.status === 'done') t.done++
+    else if (r.status === 'failed') t.failed++
+    else if (r.status === 'stopped') t.stopped++
+    t.todos += r.todos.filter(x => x.status === 'done').length
+  }
+  return t
+}
+
+/** The footer: totals so far plus what the list still shows. */
+export function overview(totals: Totals, list: Run[]): Totals & { running: number } {
+  const t = absorb(totals, list.filter(r => r.status !== 'running'))
+  const live = list.filter(r => r.status === 'running')
+  return { ...t, todos: t.todos + live.reduce((n, r) => n + r.todos.filter(x => x.status === 'done').length, 0), running: live.length }
 }

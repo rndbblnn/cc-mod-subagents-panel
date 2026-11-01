@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -138,5 +138,22 @@ describe('todo list', () => {
   })
   test('no todos: one activity line', async () => {
     expect(rowHeight(run())).toBe(4)
+  })
+})
+
+describe('overview', () => {
+  const todo = (text: string, status: 'pending' | 'in_progress' | 'done') => ({ text, status })
+  test('totals survive removal and add what the list still shows', async () => {
+    const gone = [
+      run({ id: 'x', status: 'done', todos: [todo('a', 'done'), todo('b', 'done')] }),
+      run({ id: 'y', status: 'failed', todos: [todo('a', 'done'), todo('b', 'pending')] }),
+    ]
+    const t = absorb(NO_TOTALS, gone)
+    expect(t).toEqual({ done: 1, failed: 1, stopped: 0, todos: 3 })
+    const list = [
+      run({ id: 'z', status: 'stopped', todos: [todo('a', 'done')] }),
+      run({ id: 'r', todos: [todo('a', 'done'), todo('b', 'in_progress')] }),
+    ]
+    expect(overview(t, list)).toEqual({ done: 1, failed: 1, stopped: 1, todos: 5, running: 1 })
   })
 })

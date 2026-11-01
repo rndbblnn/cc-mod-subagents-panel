@@ -33,7 +33,8 @@ test('a spawned agent is briefed, listed, and its todos open on click', async ($
   expect(prompt).toContain('mcp__subagents-panel__report')
 
   const ui = await $.ui.mount(PANE)
-  expect((await ui.find({ type: 'Text', text: /1 running/ }))?.text).toContain('1 running')
+  // The footer: session overview at the bottom.
+  expect((await ui.find({ type: 'Text', text: /agents done/ }))?.text).toMatch(/0 agents done\s+·\s+▰ 0 tasks done\s+·\s+\S 1 running/)
   await ui.press({ key: 'row-a1' })
   expect(await ui.find({ type: 'Text', text: /No TODOs reported yet/ })).toBeTruthy()
   expect(await ui.find({ type: 'Button', key: 'stop' })).toBeTruthy()

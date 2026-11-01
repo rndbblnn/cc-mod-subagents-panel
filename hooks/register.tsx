@@ -16,10 +16,12 @@ import {
   glyph,
   progress,
   prune,
+  absorb,
+  overview,
+  NO_TOTALS,
   currentIndex,
   rowHeight,
   stats,
-  summary,
   tree,
   type ReportInput,
 } from './model'
@@ -30,6 +32,7 @@ const runs = atom({ plugin: 'subagents-panel', key: 'runs' } as const, [], { sha
 const selected = atom({ plugin: 'subagents-panel', key: 'selected' } as const, null, { shape: 'selected-1' })
 const composing = atom({ plugin: 'subagents-panel', key: 'composing' } as const, false, { shape: 'composing-1' })
 const now = atom({ plugin: 'subagents-panel', key: 'now' } as const, 0, { shape: 'now-1' })
+const totals = atom({ plugin: 'subagents-panel', key: 'totals' } as const, NO_TOTALS, { shape: 'totals-1' })
 
 const PANE = 'subagents'
 const TITLE = 'Subagents'
@@ -136,6 +139,8 @@ export const register: Register = (on, options) => {
         // Finished rows leave `keepFinishedSeconds` after they end.
         const kept = prune(list, at, keepMs)
         if (kept.length !== list.length) {
+          const gone = list.filter(r => !kept.includes(r))
+          await update($, totals, t => absorb(t, gone))
           list = await update($, runs, rs => prune(rs, at, keepMs))
           const sel = await read($, selected)
           if (sel && !list.some(r => keyOf(r) === sel)) {
@@ -185,6 +190,8 @@ export const register: Register = (on, options) => {
       return { text: 'Subagents panel opened.' }
     }
     if (arg === 'clear') {
+      const gone = (await read($, runs)).filter(r => r.status !== 'running')
+      await update($, totals, t => absorb(t, gone))
       await update($, runs, list => list.filter(r => r.status === 'running'))
       await update($, selected, () => null)
       return { text: 'Finished subagents cleared.' }
@@ -338,16 +345,50 @@ export const register: Register = (on, options) => {
     const rows = tree(list)
     // Rows differ in height (the queue): keep the newest that fit the body.
     const shown: typeof rows = []
-    let used = 1
+    const FOOTER = 2
+    let used = (list.length ? 0 : 1) + FOOTER
     for (const row of [...rows].reverse()) {
       const h = rowHeight(row.run)
       if (used + h > room && shown.length) break
       used += h
       shown.unshift(row)
     }
+    const o = overview(await read($, totals), list)
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+    // Blank lines push the footer to the bottom of the body.
+    const pad = Math.max(0, room - used)
+    const footer = (
+      <Box flexDirection="column">
+        {Array.from({ length: pad }, () => (
+          <Text> </Text>
+        ))}
+        <Text dimColor wrap="truncate">{'─'.repeat(width)}</Text>
+        <Text wrap="truncate">
+          <Text color="green">✓ </Text>
+          <Text bold>{o.done}</Text>
+          <Text dimColor>{o.done === 1 ? ' agent done' : ' agents done'}</Text>
+          <Text dimColor>  ·  </Text>
+          <Text color="green">▰ </Text>
+          <Text bold>{o.todos}</Text>
+          <Text dimColor>{o.todos === 1 ? ' task done' : ' tasks done'}</Text>
+          {o.running ? (
+            <Text>
+              <Text dimColor>  ·  </Text>
+              <Text color="yellow">{glyph({ status: 'running' } as Run, at)} </Text>
+              <Text bold>{o.running}</Text>
+              <Text dimColor> running</Text>
+            </Text>
+          ) : (
+            ''
+          )}
+          {o.failed ? <Text color="red">{`  ·  ✗ ${plural(o.failed, 'failure')}`}</Text> : ''}
+          {o.stopped ? <Text color="gray">{`  ·  ■ ${o.stopped} stopped`}</Text> : ''}
+        </Text>
+      </Box>
+    )
     return (
       <Box flexDirection="column">
-        <Text dimColor>{list.length ? summary(list) : 'No subagents yet.'}</Text>
+        {list.length === 0 && <Text dimColor>No subagents yet.</Text>}
         {shown.map(({ run, depth }) => {
           const st = stats(run, at)
           const indent = '  '.repeat(Math.min(depth, 4))
@@ -393,6 +434,7 @@ export const register: Register = (on, options) => {
             </Box>
           )
         })}
+        {footer}
       </Box>
     )
   })

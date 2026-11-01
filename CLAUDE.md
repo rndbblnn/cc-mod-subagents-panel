@@ -30,7 +30,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
 - Git remote is HTTPS (SSH push fails on this laptop).
 
 ## Check
-`claude plugin validate . && claude plugin test .` (15 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (16 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
