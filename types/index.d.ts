@@ -22,6 +22,8 @@ export type Run = {
   /** What it is doing right now, e.g. "Bash: cargo test". */
   currentTool?: string
   toolCalls: number
+  /** Context tokens at the agent's latest model step (input + cache + output). */
+  tokens?: number
   /** Ordered TODOs, as the agent last reported them. */
   todos: Todo[]
   note?: string

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, shortModel, kidsOf, slotOf, blockHeight, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, compact, shortModel, kidsOf, slotOf, blockHeight, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -135,7 +135,9 @@ describe('prune', () => {
 describe('stats', () => {
   test('done/total, elapsed and ETA on one line', async () => {
     const r = run({ todos: [{ text: 'a', status: 'done' }, { text: 'b', status: 'pending' }], etaAt: 75_000 })
-    expect(stats(r, 15_000)).toEqual({ text: '1/2 · 0:15', eta: 'ETA 1:00' })
+    expect(stats(r, 15_000)).toEqual({ text: '1/2 · 0:15', eta: 'ETA 1:00', tokens: undefined })
+    expect(stats({ ...r, tokens: 38_568 }, 15_000).tokens).toBe('39k tokens')
+    expect([compact(950), compact(4_250), compact(38_568), compact(1_234_567)]).toEqual(['950', '4.3k', '39k', '1.2M'])
   })
 })
 

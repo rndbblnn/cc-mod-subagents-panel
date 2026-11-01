@@ -183,12 +183,23 @@ export function prune(runs: Run[], now: number, keepMs: number): Run[] {
   return runs.filter(r => r.status === 'running' || r.endedAt === undefined || now - r.endedAt < keepMs)
 }
 
-/** The stats line: done/total, elapsed, ETA. */
-export function stats(run: Run, now: number): { text: string; eta?: string } {
+/** 950 -> "950", 38_568 -> "38.6k", 1_234_567 -> "1.2M". */
+export function compact(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, '')}k`
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+}
+
+/** The stats line: done/total, elapsed, ETA, tokens. */
+export function stats(run: Run, now: number): { text: string; eta?: string; tokens?: string } {
   const { done, total } = progress(run)
   const left = etaLeft(run, now)
   const text = `${total ? `${done}/${total} · ` : ''}${clock((run.endedAt ?? now) - run.startedAt)}`
-  return { text, eta: left !== undefined ? `ETA ${clock(left)}` : undefined }
+  return {
+    text,
+    eta: left !== undefined ? `ETA ${clock(left)}` : undefined,
+    tokens: run.tokens ? `${compact(run.tokens)} tokens` : undefined,
+  }
 }
 
 /** Index of the current todo: the one in progress, else the next pending while the agent runs; -1 for none. */

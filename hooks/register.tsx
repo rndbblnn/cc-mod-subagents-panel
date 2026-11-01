@@ -22,6 +22,7 @@ import {
   currentIndex,
   rowHeight,
   stats,
+  compact,
   shortModel,
   kidsOf,
   slotOf,
@@ -273,6 +274,18 @@ export const register: Register = (on, options) => {
     }
   }).catch(($, e, next) => next(e))
 
+  // Each model step of a subagent: its context size, shown as tokens on the stats line.
+  on('turn.step', async function* ($, e, next) {
+    const result = yield* next(e)
+    const u = result.usage
+    if (e.agentId && u) {
+      const tokens =
+        (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)
+      if (tokens > 0) await patch($, e.agentId, r => ({ ...r, tokens }))
+    }
+    return result
+  })
+
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId) {
@@ -325,6 +338,7 @@ export const register: Register = (on, options) => {
             {total ? `${done}/${total} · ` : ''}
             {clock((pick.endedAt ?? at) - pick.startedAt)}
             {left !== undefined ? <Text color="cyan"> · ETA {clock(left)}</Text> : null}
+            {pick.tokens ? <Text dimColor> · {compact(pick.tokens)} tokens</Text> : null}
           </Text>
           <Text color={barColor(pick)} dimColor={pick.status === 'stopped'} wrap="truncate">
             {bar(pick, at, width)}
@@ -402,6 +416,7 @@ export const register: Register = (on, options) => {
           <Text wrap="truncate">
             {indent}  <Text dimColor>{st.text}</Text>
             {st.eta ? <Text color="cyan"> · {st.eta}</Text> : ''}
+            {st.tokens ? <Text dimColor> · {st.tokens}</Text> : ''}
           </Text>
           <Text wrap="truncate">
             {indent}  <Text color={barColor(run)} dimColor={run.status === 'stopped'}>{bar(run, at, barWidth)}</Text>
