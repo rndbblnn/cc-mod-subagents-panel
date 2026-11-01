@@ -33,10 +33,16 @@ const KEEP = 100
 
 const keyOf = (r: Run) => r.agentId ?? r.id
 
-async function openPane($: EngineInterface, focus = false): Promise<void> {
+/** Opens the pane; resolves whether a surface draws it now. */
+async function openPane($: EngineInterface, focus = false): Promise<boolean> {
   await update($, now, () => Date.now())
-  await $.ui.open({ id: PANE, title: TITLE, columns: 56, ...(focus ? { focus: true as const } : {}) })
+  const opened = await $.ui.open({ id: PANE, title: TITLE, columns: 56, ...(focus ? { focus: true as const } : {}) })
+  return opened.isPlaced
 }
+
+// An unasked pane waits undrawn on a narrow terminal (below 144 columns, 110 once
+// the person has opened it): say so once, and keep a status line entry instead.
+let hinted = false
 
 async function togglePane($: EngineInterface): Promise<boolean> {
   if ((await $.ui.panes()).some(p => p.id === PANE)) {
@@ -116,7 +122,9 @@ export const register: Register = (on, options) => {
     $.clock.every(1000, () => {
       void (async () => {
         const list = await read($, runs)
-        if (!list.some(r => r.status === 'running')) return
+        const running = list.filter(r => r.status === 'running').length
+        $.ui.status(running ? `⚙ ${running} subagent${running > 1 ? 's' : ''} running · /subagents` : undefined)
+        if (!running) return
         const at = Date.now()
         await update($, now, () => at)
         if (++tick % 5 !== 0) return
@@ -182,7 +190,10 @@ export const register: Register = (on, options) => {
       todos: [],
     }
     await update($, runs, list => [...list.filter(r => keyOf(r) !== keyOf(run)), run].slice(-KEEP))
-    if (autoOpen) await openPane($)
+    if (autoOpen && !(await openPane($)) && !hinted) {
+      hinted = true
+      await $.ui.toast('Subagents running: type /subagents to show the panel (terminal too narrow to open it by itself)')
+    }
     return started
   }).catch(($, e, next) => next(e))
 

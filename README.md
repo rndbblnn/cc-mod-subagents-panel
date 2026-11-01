@@ -28,7 +28,7 @@ A Claude Code mod: a live panel of **every** subagent beside the chat, drawn as 
 { "pluginConfigs": { "subagents-panel": { "options": { "autoOpen": true, "pingSeconds": 90 } } } }
 ```
 
-- `autoOpen` (default `true`): open the panel when any subagent starts.
+- `autoOpen` (default `true`): open the panel when any subagent starts. Self-opening needs a terminal ≥144 columns (≥110 after you have opened it once with `/subagents`); narrower, the status line shows the running count and `/subagents` opens it.
 - `pingSeconds` (default `90`, `0` = off): message an agent that has not reported for this long.
 
 ## Install
