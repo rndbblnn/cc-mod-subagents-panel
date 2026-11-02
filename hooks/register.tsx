@@ -316,10 +316,12 @@ export const register: Register = (on, options) => {
     const sel = await read($, selected)
     // The pane's own body, inside its frame, not the terminal (`viewport` is the whole screen).
     const width = Math.max(12, e.props.bodyColumns ?? 56)
-    // A docked pane draws one row more than `bodyRows` says (measured live in 2.1.316: filling
-    // exactly `bodyRows` left a blank row under the footer). Padding to it keeps the footer on
-    // the bottom edge; `height="100%"` with a spacer does not work, the body has no fixed height.
-    const room = Math.max(4, (e.props.scroll?.bodyRows ?? 24) + (e.props.placement === 'dock' ? 1 : 0))
+    // Measured live in 2.1.316: with nothing running (so no status line from this mod) a docked
+    // pane shows one row more than `bodyRows`; with the status line up it shows exactly `bodyRows`.
+    // Padding to the real height keeps the footer on the bottom edge without clipping its last row.
+    // (`height="100%"` with a spacer does not work: the body has no fixed height.)
+    const statusShown = list.some(r => r.status === 'running')
+    const room = Math.max(4, (e.props.scroll?.bodyRows ?? 24) + (e.props.placement === 'dock' && !statusShown ? 1 : 0))
 
     const pick = sel ? list.find(r => keyOf(r) === sel) : undefined
     if (pick) {
