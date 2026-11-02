@@ -21,9 +21,9 @@
 
 <br>
 
-<img src="assets/hero.png" alt="subagents-panel mid-run: three subagents with live progress bars, ETAs and token counts; one delegates a task to a child agent drawn under that task" width="420">
+<img src="assets/hero.png" alt="subagents-panel mid-run: three subagents with live progress bars, ETAs and token counts; one delegates a task to a child agent drawn under that task; the footer shows the session task timeline" width="420">
 
-<sub>Real screenshot, not a mockup. Three agents in parallel; the middle one delegated "Audit routes" to a child agent.</sub>
+<sub>Real screenshot, not a mockup. Three agents in parallel; the middle one delegated "Audit routes" to a child agent. Footer: 26 tasks done this session, 4 running now, 2 up next.</sub>
 
 </div>
 
@@ -52,19 +52,20 @@ Restart Claude Code. The next subagent opens the panel on the right.
 
 ## Anatomy of a card
 
-<img src="assets/plans.png" alt="One real agent card" width="380" align="right">
+<img src="assets/plans.png" alt="One real agent card, with a child agent nested under the task that launched it" width="380" align="right">
 
 ```
 ⠼ general-purpose  haiku 5.5      spinner · agent type · model
-  0:54 · ETA 0:15 · 40k           elapsed · ETA · context
+  1:00 · ETA 0:16 · 40k           elapsed · ETA · context
   ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱       yellow while running, green when done
-  ✓ Map the auth module           done
-  ▸ Audit routes (delegate)       current task
+  ✓ Plan the changes              done
+  ✓ Audit routes (delegate)       done; its child is still working:
       ⠧ general-purpose  haiku    a child agent, nested under
-        0:38 · 38k                the task that spawned it
-  ○ Refactor token refresh        up next
+        0:36 · ETA 0:10 · 39k     the task that spawned it
+  ▸ Patch rate limits · Bash: …   current task + live tool call
+  ○ Run the tests                 up next
 ── tasks ─────────────────────    the footer:
-✓ 18 done   ▸ 3 now   9 next ○    session task timeline,
+✓ 26 done   ▸ 4 now   2 next ○    session task timeline,
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━    done · now · next
 ▼ 2 more agents not shown         cards that didn't fit
 ⚠ scan repo  quiet 2:30           needs a look (click it)
@@ -130,7 +131,7 @@ sequenceDiagram
 | File | Lines | What's in it |
 | --- | --: | --- |
 | [`hooks/model.ts`](hooks/model.ts) | 346 | Pure logic: tree, sort, ETA, ping schedule, timeline, alerts. No I/O, fully unit-tested |
-| [`hooks/register.tsx`](hooks/register.tsx) | 553 | The seven hooks and the JSX the panel draws |
+| [`hooks/register.tsx`](hooks/register.tsx) | 558 | The seven hooks and the JSX the panel draws |
 | [`types/index.d.ts`](types/index.d.ts) | 54 | The state contract: `Run`, `Todo` |
 
 Zero runtime dependencies: every import is from Claude Code itself. No background process, no network, no files written. State lives in the session (`$.state`) and dies with it.
@@ -141,6 +142,7 @@ What's verified, and what isn't:
 
 - ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 28 unit and render tests.
 - ⚠️ **Stop** uses `TaskStop` through the mod's tool-call API, which isn't a documented mod surface. If Claude Code refuses it, a toast says why.
+- ⚠️ **Needs-attention alerts** (quiet or failed agents) are covered by tests, not yet seen in a live session.
 - ⚠️ **Status pings** (`$.session.send`) haven't been confirmed delivered in live testing yet. A ping that fails now says so in a toast, with the reason.
 - **ETAs are estimates.** An agent's guess can be wrong; the panel shows it, it doesn't vouch for it.
 - **Auto-open needs width.** Claude Code only opens a side panel by itself on a terminal ≥ 144 columns (≥ 110 once you've opened it by hand). Narrower, use `/subagents`.
