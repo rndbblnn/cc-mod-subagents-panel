@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree , parsePlanLine } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -238,5 +238,38 @@ describe('turn end', () => {
   test('activity revives done/failed, never stopped', async () => {
     expect(revive(run({ status: 'done', endedAt: 5 })).status).toBe('running')
     expect(revive(run({ status: 'stopped', endedAt: 5 })).status).toBe('stopped')
+  })
+})
+
+describe('PLAN line (agents without the report tool)', () => {
+  test('reads marks, todos and eta from the last PLAN line', () => {
+    const text = 'Looking at the store.\nPLAN: [x] old | [ ] stale\nthen\nPLAN: [x] read schema | [>] patch outbox | [ ] run tests | eta 180\nNow patching.'
+    expect(parsePlanLine(text)).toEqual({
+      todos: [
+        { text: 'read schema', status: 'done' },
+        { text: 'patch outbox', status: 'in_progress' },
+        { text: 'run tests', status: 'pending' },
+      ],
+      eta_seconds: 180,
+    })
+  })
+  test('tolerates markdown, symbol marks and eta units', () => {
+    expect(parsePlanLine('**PLAN:** ✓ a | ▸ b | ○ c | ETA: 2m30s')).toEqual({
+      todos: [
+        { text: 'a', status: 'done' },
+        { text: 'b', status: 'in_progress' },
+        { text: 'c', status: 'pending' },
+      ],
+      eta_seconds: 150,
+    })
+    expect(parsePlanLine('PLAN: [X] a | [~] b | c')?.todos?.map(t => t.status)).toEqual(['done', 'in_progress', 'pending'])
+  })
+  test('no PLAN line, or an empty one, is no report', () => {
+    expect(parsePlanLine('the plan: do it')).toBeUndefined()
+    expect(parsePlanLine('')).toBeUndefined()
+    expect(parsePlanLine('PLAN:   ')).toBeUndefined()
+  })
+  test('an eta-only line keeps the todos and moves the eta', () => {
+    expect(parsePlanLine('PLAN: eta 45')).toEqual({ eta_seconds: 45 })
   })
 })

@@ -13,9 +13,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-111111?style=flat-square)](LICENSE)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-d97757?style=flat-square)](https://docs.claude.com/en/docs/claude-code)
 [![Version](https://img.shields.io/github/v/tag/rndbblnn/cc-mod-subagents-panel?style=flat-square&label=version&color=111111)](https://github.com/rndbblnn/cc-mod-subagents-panel/tags)
-![~950 lines](https://img.shields.io/badge/source-~950%20lines-111111?style=flat-square)
+![~1000 lines](https://img.shields.io/badge/source-~1000%20lines-111111?style=flat-square)
 ![0 dependencies](https://img.shields.io/badge/dependencies-0-111111?style=flat-square)
-![28 tests](https://img.shields.io/badge/tests-28%20passing-3fb950?style=flat-square)
+![33 tests](https://img.shields.io/badge/tests-33%20passing-3fb950?style=flat-square)
 
 **[Install](#install-30-seconds)** · **[Anatomy](#anatomy-of-a-card)** · **[How it works](#how-it-works)** · **[Limits](#evidence-and-limits)** · **[FAQ](#faq)**
 
@@ -103,7 +103,7 @@ sequenceDiagram
     participant A as Subagent
     M->>P: agent.spawn
     P->>A: prompt + a short brief ("report your plan")
-    A->>P: report(todos, eta_seconds)
+    A->>P: report(todos, eta_seconds), or a PLAN: line in its text
     loop while it works
         A-->>P: tool.call  (live command)
         A-->>P: turn.step  (context tokens)
@@ -119,7 +119,7 @@ sequenceDiagram
 | `agent.spawn` | Appends the brief, adds a card, records the parent's current todo. A repeat spawn is a resume: the card is revived, not reset |
 | `tool.call` · `report` | Stores the ordered todos and ETA |
 | `tool.call` · any other | Shows the live call (`Bash: cargo test`), counts calls |
-| `turn.step` | Reads usage: input + cache + output = context tokens |
+| `turn.step` | Reads usage: input + cache + output = context tokens. Reads a `PLAN:` line from the step's text, for agents that can't call the report tool |
 | `turn.complete` | Marks the agent done, unless one of its own children still runs (it's waiting) |
 | `ui.render` · `Pane` | Draws the tree: cards fit whole, top first, children nested under their todo |
 | `session.start` | Registers the tool and `/subagents`, starts a 1 s tick for spinners, pings, cleanup and a reconcile against `$.agent.list()` |
@@ -130,8 +130,8 @@ sequenceDiagram
 
 | File | Lines | What's in it |
 | --- | --: | --- |
-| [`hooks/model.ts`](hooks/model.ts) | 346 | Pure logic: tree, sort, ETA, ping schedule, timeline, alerts. No I/O, fully unit-tested |
-| [`hooks/register.tsx`](hooks/register.tsx) | 558 | The seven hooks and the JSX the panel draws |
+| [`hooks/model.ts`](hooks/model.ts) | 399 | Pure logic: tree, sort, ETA, ping schedule, timeline, alerts, `PLAN:` lines. No I/O, fully unit-tested |
+| [`hooks/register.tsx`](hooks/register.tsx) | 562 | The seven hooks and the JSX the panel draws |
 | [`types/index.d.ts`](types/index.d.ts) | 54 | The state contract: `Run`, `Todo` |
 
 Zero runtime dependencies: every import is from Claude Code itself. No background process, no network, no files written. State lives in the session (`$.state`) and dies with it.
@@ -140,10 +140,11 @@ Zero runtime dependencies: every import is from Claude Code itself. No backgroun
 
 What's verified, and what isn't:
 
-- ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 28 unit and render tests.
+- ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 33 unit and render tests.
 - ⚠️ **Stop** uses `TaskStop` through the mod's tool-call API, which isn't a documented mod surface. If Claude Code refuses it, a toast says why.
 - ⚠️ **Needs-attention alerts** (quiet or failed agents) are covered by tests, not yet seen in a live session.
 - ⚠️ **Status pings** (`$.session.send`) haven't been confirmed delivered in live testing yet. A ping that fails now says so in a toast, with the reason.
+- ✅ **Agents without the report tool** (a `tools:` allowlist that leaves it out) report with a `PLAN:` line instead: seen live with a Sonnet agent. A model may skip updating it, so such a card can lag behind the real work.
 - **ETAs are estimates.** An agent's guess can be wrong; the panel shows it, it doesn't vouch for it.
 - **Auto-open needs width.** Claude Code only opens a side panel by itself on a terminal ≥ 144 columns (≥ 110 once you've opened it by hand). Narrower, use `/subagents`.
 - **No scrolling yet.** Cards fit top-first; the footer counts the ones that didn't fit, and they appear as others finish.
@@ -179,23 +180,23 @@ Your terminal is narrower than 144 columns. The status line shows `⚙ 2 subagen
 </details>
 
 <details>
-<summary><b>An agent never shows todos.</b></summary>
+<summary><b>My agents have a <code>tools:</code> list. Do I need to add the report tool?</b></summary>
 <br>
 
-Custom agents with a `tools:` allowlist need the report tool:
+No. Claude Code only lets an agent call the tools on its list, so an agent with a `tools:` list usually can't call the report tool. The brief covers that: such an agent writes its plan as one line of text instead,
 
-```yaml
-tools: [Read, Grep, Bash, mcp__subagents-panel__report]
+```
+PLAN: [x] read schema | [>] patch outbox retry | [ ] run tests | eta 180
 ```
 
-Without it the card still shows the live tool call and tokens, just no plan.
+and the panel reads it. That works for every agent, including ones you write later, with nothing to edit. Listing `mcp__subagents-panel__report` in `tools:` is optional; a tool call is a little more reliable than a line of text.
 </details>
 
 <details>
 <summary><b>Does it cost tokens?</b></summary>
 <br>
 
-One short paragraph appended to each subagent's prompt, plus one small tool call per todo. Pings only go to agents silent for `pingSeconds`.
+One short paragraph appended to each subagent's prompt, plus one small tool call (or one line of text) per todo change. Pings only go to agents silent for `pingSeconds`.
 </details>
 
 <details>

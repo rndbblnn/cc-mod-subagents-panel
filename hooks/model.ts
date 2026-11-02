@@ -4,13 +4,66 @@ import type { Run, Todo, TodoStatus } from '../types'
 export const REPORT_TOOL = 'mcp__subagents-panel__report'
 
 export const BRIEF =
-  `\n\n---\nProgress reporting (subagents-panel): right after reading this brief, call \`${REPORT_TOOL}\` ` +
-  'with your plan as an ordered `todos` list (3-8 items) and `eta_seconds`, your best guess of the time left. ' +
-  'Call it again whenever a TODO changes status, and refresh `eta_seconds` each time. It is cheap and silent.'
+  `\n\n---\nProgress reporting (subagents-panel): right after reading this brief, report your plan as an ` +
+  'ordered list of 3-8 short todos plus your best guess of the seconds left, and report again whenever a todo ' +
+  `changes status. If you have the \`${REPORT_TOOL}\` tool, call it (\`todos\` + \`eta_seconds\`). ` +
+  'If you do not have it, write this one line in your response text instead, on its own line:\n' +
+  'PLAN: [x] a done todo | [>] the current todo | [ ] a todo still to do | eta 180\n' +
+  '([x] done, [>] in progress, [ ] not started; eta in seconds). It is cheap and silent; ' +
+  'keep it out of your final answer.'
 
 export const PING =
-  `[subagents-panel] Status check: please call \`${REPORT_TOOL}\` now with your updated ordered todos ` +
-  'and a fresh eta_seconds, then carry on.'
+  `[subagents-panel] Status check: please report now, with \`${REPORT_TOOL}\` if you have it, ` +
+  'otherwise with a `PLAN: [x] … | [>] … | [ ] … | eta <seconds>` line, then carry on.'
+
+const MARKS: [RegExp, TodoStatus][] = [
+  [/^\[\s*[xX✓✔]\s*\]\s*|^[✓✔]\s*/, 'done'],
+  [/^\[\s*[>~▸*-]\s*\]\s*|^[▸>]\s*/, 'in_progress'],
+  [/^\[\s*\]\s*|^[○]\s*/, 'pending'],
+]
+
+/** Seconds from `180`, `180s`, `3m`, `2m30s`, `1h`; undefined if it reads as none of them. */
+function seconds(text: string): number | undefined {
+  const t = text.trim().toLowerCase().replace(/^~/, '')
+  if (/^\d+$/.test(t)) return Number(t)
+  const m = t.match(/^(?:(\d+)\s*h)?\s*(?:(\d+)\s*m(?:in)?)?\s*(?:(\d+)\s*s(?:ec)?)?$/)
+  if (!m || (!m[1] && !m[2] && !m[3])) return undefined
+  return Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0)
+}
+
+/**
+ * The agent's last `PLAN:` line in a step's text, as a report: the route for agents
+ * whose `tools:` allowlist leaves out the report tool. Undefined when there is none.
+ */
+export function parsePlanLine(text: string): ReportInput | undefined {
+  const lines = (text || '').split('\n').filter(l => /^\s*[*_`>]*\s*PLAN\s*:/i.test(l))
+  const line = lines[lines.length - 1]
+  if (!line) return undefined
+  const body = line.replace(/^\s*[*_`>]*\s*PLAN\s*:\s*[*_`]*/i, '').replace(/[`*_]+\s*$/, '')
+  const todos: { text: string; status: TodoStatus }[] = []
+  let eta: number | undefined
+  for (const raw of body.split('|')) {
+    const part = raw.trim()
+    if (!part) continue
+    const e = part.match(/^eta\s*[:=]?\s*(.+)$/i)
+    if (e) {
+      eta = seconds(e[1]) ?? eta
+      continue
+    }
+    let status: TodoStatus = 'pending'
+    let rest = part
+    for (const [re, s] of MARKS) {
+      if (re.test(part)) {
+        status = s
+        rest = part.replace(re, '')
+        break
+      }
+    }
+    if (rest.trim()) todos.push({ text: rest.trim(), status })
+  }
+  if (!todos.length && eta === undefined) return undefined
+  return { ...(todos.length ? { todos } : {}), ...(eta !== undefined ? { eta_seconds: eta } : {}) }
+}
 
 export type ReportInput = {
   todos?: { text?: unknown; status?: unknown }[]

@@ -110,3 +110,36 @@ test('the footer shows the task timeline and flags agents that need a look', asy
   expect((await ui.find({ type: 'Button', key: 'alert-a2' }))?.text).toMatch(/audit\s+failed · error/)
   await ui.unmount()
 })
+
+test('an agent without the report tool reports with a PLAN line in its text', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  let prompt = ''
+  on('agent.spawn', (_, e) => {
+    prompt = e.prompt
+    return { agentId: 'a1', model: 'claude-sonnet-5-5' }
+  })
+  on('turn.step', async function* (_: unknown, e: { turnId: string; index: number }) {
+    return {
+    turnId: e.turnId,
+    index: e.index,
+    answer: 'Reading first.\nPLAN: [x] read schema | [>] patch outbox | [ ] run tests | eta 120',
+    toolUses: [],
+    stopReason: 'tool_use',
+    usage: null,
+    }
+  } as never)
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'x', description: 'outbox', subagentType: 'app-engineer' } as never)
+  expect(prompt).toContain('PLAN: [x]')
+  // turn.step streams: its hooks run as the stream is read.
+  for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-sonnet-5-5', messageCount: 1, agentId: 'a1' } as never) as never as AsyncIterable<unknown>) void _
+
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: /patch outbox/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /ETA/ })).toBeTruthy()
+  await ui.unmount()
+})

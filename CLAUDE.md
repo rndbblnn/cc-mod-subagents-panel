@@ -25,11 +25,16 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
   the mod, `.claude-plugin/types/` (gitignored) holds the types and `tsc -p .` works.
 - Stop uses `$.tool.call({ tool: 'TaskStop', task_id: agentId })` — not documented as a mod
   API; if the engine refuses, the toast says why.
-- Agents with a `tools:` allowlist in `~/.claude/agents/*.md` must list
-  `mcp__subagents-panel__report`, or they cannot report.
+- **Agents with a `tools:` allowlist can't call the report tool**, and a mod can't add it: neither
+  `agent.spawn` nor `prompt.compose` lets a hook change an agent's tools (2.1.316). So the brief
+  offers a fallback, a `PLAN: [x] a | [>] b | [ ] c | eta 180` line in the agent's text, which the
+  `turn.step` hook reads from `result.answer` (`parsePlanLine`). Seen live 2026-11-02 with a Sonnet
+  `claude-code-guide` agent: plan and ETA showed within 4 s; it never sent an update in a 19 s run.
+- `turn.step` streams: a test's mock must be an `async function*`, and the test must read the
+  stream (`for await (… of $.turn.step(…))`) or no hook runs.
 
 ## Check
-`claude plugin validate . && claude plugin test .` (28 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (33 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)

@@ -7,6 +7,7 @@ import {
   PING,
   REPORT_TOOL,
   applyReport,
+  parsePlanLine,
   bar,
   clock,
   describeCall,
@@ -293,6 +294,9 @@ export const register: Register = (on, options) => {
         (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)
       if (tokens > 0) await patch($, e.agentId, r => ({ ...revive(r), tokens, lastActivityAt: Date.now() }))
     }
+    // Agents whose tools: allowlist leaves out the report tool report with a PLAN: line instead.
+    const plan = e.agentId ? parsePlanLine(result.answer) : undefined
+    if (e.agentId && plan) await patch($, e.agentId, r => applyReport(revive(r), plan, Date.now()))
     return result
   })
 
