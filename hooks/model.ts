@@ -190,11 +190,10 @@ export function compact(n: number): string {
   return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
 }
 
-/** The stats line: done/total, elapsed, ETA, tokens. */
+/** The stats line: elapsed, ETA, tokens. */
 export function stats(run: Run, now: number): { text: string; eta?: string; tokens?: string } {
-  const { done, total } = progress(run)
   const left = etaLeft(run, now)
-  const text = `${total ? `${done}/${total} · ` : ''}${clock((run.endedAt ?? now) - run.startedAt)}`
+  const text = clock((run.endedAt ?? now) - run.startedAt)
   return {
     text,
     eta: left !== undefined ? `ETA ${clock(left)}` : undefined,

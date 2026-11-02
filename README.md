@@ -56,12 +56,12 @@ Restart Claude Code. The next subagent opens the panel on the right.
 
 ```
 ⠼ general-purpose  haiku 5.5      spinner · agent type · model
-  1/5 · 0:54 · ETA 0:15 · 40k     todos done · elapsed · ETA · context
+  0:54 · ETA 0:15 · 40k           elapsed · ETA · context
   ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱       yellow while running, green when done
   ✓ Map the auth module           done
   ▸ Audit routes (delegate)       current task
       ⠧ general-purpose  haiku    a child agent, nested under
-        3/3 · 0:38 · 38k          the task that spawned it
+        0:38 · 38k                the task that spawned it
   ○ Refactor token refresh        up next
 ──────────────────────────────
 ✓ 20 agents done · ▰ 80 tasks     session scoreboard
