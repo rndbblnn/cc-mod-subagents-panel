@@ -53,3 +53,7 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
   alerts (failed; running with no tool call/report/model step for `pingSeconds`). Rendered only
   when it has something to say; fitting reserves its height first. Failed rows are never
   auto-pruned. A `turn.complete` test event needs `answer`, `durationMs`, `isAborted`, `turnId`.
+- **Shape bump + hot reload drops in-flight rows (seen 2026-11-02, cause inferred).** Agents spawned
+  in the same turn as an edit that bumped `runs-1`→`runs-2` got "no panel row" for every report:
+  their rows were written under the old shape, and the reloaded module started from `[]`. Spawns
+  after the reload were fine. When testing a shape change live, spawn test agents in a later turn.
