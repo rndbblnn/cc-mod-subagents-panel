@@ -29,7 +29,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
   `mcp__subagents-panel__report`, or they cannot report.
 
 ## Check
-`claude plugin validate . && claude plugin test .` (20 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (28 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
@@ -48,3 +48,8 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
 - Nesting: at `agent.spawn` the child records the parent's current todo (`parentTodo`);
   the list renders recursively (`block()`), each child under that todo (`slotOf`), and
   fits whole root blocks (`blockHeight`) top first.
+- Footer (`timeline`, `attention`, `segments`, `labelGaps` in model.ts): task timeline across the
+  session (`archived` atom keeps done todos of pruned rows), "▼ N more agents not shown", and
+  alerts (failed; running with no tool call/report/model step for `pingSeconds`). Rendered only
+  when it has something to say; fitting reserves its height first. Failed rows are never
+  auto-pruned. A `turn.complete` test event needs `answer`, `durationMs`, `isAborted`, `turnId`.

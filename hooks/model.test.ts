@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, absorb, overview, NO_TOTALS, currentIndex, rowHeight, stats, tree } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -157,20 +157,45 @@ describe('todo list', () => {
   })
 })
 
-describe('overview', () => {
+describe('footer', () => {
   const todo = (text: string, status: 'pending' | 'in_progress' | 'done') => ({ text, status })
-  test('totals survive removal and add what the list still shows', async () => {
-    const gone = [
-      run({ id: 'x', status: 'done', todos: [todo('a', 'done'), todo('b', 'done')] }),
-      run({ id: 'y', status: 'failed', todos: [todo('a', 'done'), todo('b', 'pending')] }),
-    ]
-    const t = absorb(NO_TOTALS, gone)
-    expect(t).toEqual({ done: 1, failed: 1, stopped: 0, todos: 3 })
+  test('timeline: done includes archived; current and next only from running agents', async () => {
     const list = [
-      run({ id: 'z', status: 'stopped', todos: [todo('a', 'done')] }),
-      run({ id: 'r', todos: [todo('a', 'done'), todo('b', 'in_progress')] }),
+      run({ id: 'r', todos: [todo('a', 'done'), todo('b', 'in_progress'), todo('c', 'pending'), todo('d', 'pending')] }),
+      run({ id: 'w', todos: [todo('a', 'done'), todo('b', 'pending')] }),
+      run({ id: 'f', status: 'failed', todos: [todo('a', 'done'), todo('b', 'pending')] }),
     ]
-    expect(overview(t, list)).toEqual({ done: 1, failed: 1, stopped: 1, todos: 5, running: 1 })
+    expect(timeline(list, 10)).toEqual({ done: 13, current: 2, upcoming: 2 })
+  })
+  test('segments fill the width exactly and never hide a non-zero part', async () => {
+    expect(segments({ done: 50, current: 1, upcoming: 49 }, 20)).toEqual([10, 1, 9])
+    expect(segments({ done: 1, current: 1, upcoming: 1 }, 10).reduce((a, b) => a + b, 0)).toBe(10)
+    expect(segments({ done: 0, current: 0, upcoming: 0 }, 10)).toEqual([0, 0, 0])
+  })
+  test('labels: "now" sits over the current segment, clamped between its neighbours', async () => {
+    expect(labelGaps(9, 7, 8, 20, 40)).toEqual([11, 5])
+    expect(labelGaps(9, 7, 8, 0, 40)).toEqual([1, 15])
+    expect(labelGaps(9, 7, 8, 39, 40)).toEqual([15, 1])
+    expect(labelGaps(20, 10, 9, 5, 40)).toBe(undefined)
+  })
+  test('attention: failed first, then running agents quiet past the threshold, quietest first', async () => {
+    const list = [
+      run({ id: 'ok', agentId: 'ok', description: 'busy', startedAt: 0, lastActivityAt: 95_000 }),
+      run({ id: 'q1', agentId: 'q1', description: 'scan', startedAt: 0, lastActivityAt: 5_000, currentTool: 'Bash: cargo test' }),
+      run({ id: 'q2', agentId: 'q2', description: 'map', startedAt: 0, lastReportAt: 1_000 }),
+      run({ id: 'f', agentId: 'f', description: 'audit', status: 'failed', failReason: 'error' }),
+    ]
+    expect(attention(list, 100_000, 90_000)).toEqual([
+      { key: 'f', kind: 'failed', name: 'audit', detail: 'failed · error' },
+      { key: 'q2', kind: 'quiet', name: 'map', detail: 'quiet 1:39' },
+      { key: 'q1', kind: 'quiet', name: 'scan', detail: 'quiet 1:35 · Bash: cargo test' },
+    ])
+  })
+  test('failed rows stay until cleared; a failed turn records why', async () => {
+    const f = run({ id: 'f', status: 'failed', endedAt: 0 })
+    expect(prune([f], 60_000, 10_000).length).toBe(1)
+    expect(finishTurn(run(), 'error', 5, []).failReason).toBe('error')
+    expect(revive({ ...f, failReason: 'error' }).failReason).toBe(undefined)
   })
 })
 

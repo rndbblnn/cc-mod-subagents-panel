@@ -13,9 +13,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-111111?style=flat-square)](LICENSE)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-d97757?style=flat-square)](https://docs.claude.com/en/docs/claude-code)
 [![Version](https://img.shields.io/github/v/tag/rndbblnn/cc-mod-subagents-panel?style=flat-square&label=version&color=111111)](https://github.com/rndbblnn/cc-mod-subagents-panel/tags)
-![~840 lines](https://img.shields.io/badge/source-~840%20lines-111111?style=flat-square)
+![~950 lines](https://img.shields.io/badge/source-~950%20lines-111111?style=flat-square)
 ![0 dependencies](https://img.shields.io/badge/dependencies-0-111111?style=flat-square)
-![23 tests](https://img.shields.io/badge/tests-23%20passing-3fb950?style=flat-square)
+![28 tests](https://img.shields.io/badge/tests-28%20passing-3fb950?style=flat-square)
 
 **[Install](#install-30-seconds)** · **[Anatomy](#anatomy-of-a-card)** · **[How it works](#how-it-works)** · **[Limits](#evidence-and-limits)** · **[FAQ](#faq)**
 
@@ -63,15 +63,20 @@ Restart Claude Code. The next subagent opens the panel on the right.
       ⠧ general-purpose  haiku    a child agent, nested under
         0:38 · 38k                the task that spawned it
   ○ Refactor token refresh        up next
-──────────────────────────────
-✓ 20 agents done · ▰ 80 tasks     session scoreboard
+── tasks ─────────────────────    the footer:
+✓ 18 done   ▸ 3 now   9 next ○    session task timeline,
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━    done · now · next
+▼ 2 more agents not shown         cards that didn't fit
+⚠ scan repo  quiet 2:30           needs a look (click it)
+✗ audit routes  failed · error    stays until /subagents clear
 ```
 
 <br clear="right">
 
 - **Sorted by ETA**, longest first, so what you're waiting on is always on top.
 - **Live tool call** next to the current task: `▸ Run the test suite · Bash: cargo test`.
-- **Finished cards leave after 10 s.** The background is your terminal's own.
+- **Finished cards leave after 10 s.** Failed ones stay until `/subagents clear`. The background is your terminal's own.
+- **The footer only says what's useful:** where the session's work stands, what's off-screen, and which agents need a look. Nothing to say, no footer.
 
 ## Talk to your agents
 
@@ -124,9 +129,9 @@ sequenceDiagram
 
 | File | Lines | What's in it |
 | --- | --: | --- |
-| [`hooks/model.ts`](hooks/model.ts) | 291 | Pure logic: tree, sort, ETA, ping schedule, totals. No I/O, fully unit-tested |
-| [`hooks/register.tsx`](hooks/register.tsx) | 494 | The seven hooks and the JSX the panel draws |
-| [`types/index.d.ts`](types/index.d.ts) | 53 | The state contract: `Run`, `Todo`, `Totals` |
+| [`hooks/model.ts`](hooks/model.ts) | 346 | Pure logic: tree, sort, ETA, ping schedule, timeline, alerts. No I/O, fully unit-tested |
+| [`hooks/register.tsx`](hooks/register.tsx) | 553 | The seven hooks and the JSX the panel draws |
+| [`types/index.d.ts`](types/index.d.ts) | 54 | The state contract: `Run`, `Todo` |
 
 Zero runtime dependencies: every import is from Claude Code itself. No background process, no network, no files written. State lives in the session (`$.state`) and dies with it.
 
@@ -134,12 +139,12 @@ Zero runtime dependencies: every import is from Claude Code itself. No backgroun
 
 What's verified, and what isn't:
 
-- ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 23 unit and render tests.
+- ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 28 unit and render tests.
 - ⚠️ **Stop** uses `TaskStop` through the mod's tool-call API, which isn't a documented mod surface. If Claude Code refuses it, a toast says why.
 - ⚠️ **Status pings** (`$.session.send`) haven't been confirmed delivered in live testing yet. A ping that fails now says so in a toast, with the reason.
 - **ETAs are estimates.** An agent's guess can be wrong; the panel shows it, it doesn't vouch for it.
 - **Auto-open needs width.** Claude Code only opens a side panel by itself on a terminal ≥ 144 columns (≥ 110 once you've opened it by hand). Narrower, use `/subagents`.
-- **No scrolling yet.** Cards fit top-first; more agents than fit wait below until others finish.
+- **No scrolling yet.** Cards fit top-first; the footer counts the ones that didn't fit, and they appear as others finish.
 - **The mod API is early access** and may change between Claude Code releases.
 
 ## Commands and options

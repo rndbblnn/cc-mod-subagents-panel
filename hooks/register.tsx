@@ -16,9 +16,10 @@ import {
   glyph,
   progress,
   prune,
-  absorb,
-  overview,
-  NO_TOTALS,
+  attention,
+  labelGaps,
+  timeline,
+  segments,
   currentIndex,
   rowHeight,
   stats,
@@ -35,11 +36,12 @@ import {
 
 // Bump a shape tag when that value's fields change: it declines what an older
 // version stored, which outlives a reload.
-const runs = atom({ plugin: 'subagents-panel', key: 'runs' } as const, [], { shape: 'runs-1' })
+const runs = atom({ plugin: 'subagents-panel', key: 'runs' } as const, [], { shape: 'runs-2' })
 const selected = atom({ plugin: 'subagents-panel', key: 'selected' } as const, null, { shape: 'selected-1' })
 const composing = atom({ plugin: 'subagents-panel', key: 'composing' } as const, false, { shape: 'composing-1' })
 const now = atom({ plugin: 'subagents-panel', key: 'now' } as const, 0, { shape: 'now-1' })
-const totals = atom({ plugin: 'subagents-panel', key: 'totals' } as const, NO_TOTALS, { shape: 'totals-1' })
+const archived = atom({ plugin: 'subagents-panel', key: 'archived' } as const, 0, { shape: 'archived-1' })
+const doneTodos = (rs: Run[]) => rs.reduce((n, r) => n + r.todos.filter(t => t.status === 'done').length, 0)
 
 const PANE = 'subagents'
 const TITLE = 'Subagents'
@@ -172,7 +174,7 @@ export const register: Register = (on, options) => {
         const kept = prune(list, at, keepMs)
         if (kept.length !== list.length) {
           const gone = list.filter(r => !kept.includes(r))
-          await update($, totals, t => absorb(t, gone))
+          await update($, archived, n => n + doneTodos(gone))
           list = await update($, runs, rs => prune(rs, at, keepMs))
           const sel = await read($, selected)
           if (sel && !list.some(r => keyOf(r) === sel)) {
@@ -219,7 +221,7 @@ export const register: Register = (on, options) => {
     }
     if (arg === 'clear') {
       const gone = (await read($, runs)).filter(r => r.status !== 'running')
-      await update($, totals, t => absorb(t, gone))
+      await update($, archived, n => n + doneTodos(gone))
       await update($, runs, list => list.filter(r => r.status === 'running'))
       await update($, selected, () => null)
       return { text: 'Finished subagents cleared.' }
@@ -274,7 +276,7 @@ export const register: Register = (on, options) => {
     const agentId = e.agentId
     if (!agentId || e.tool === REPORT_TOOL) return next(e)
     const label = describeCall(e.tool, e as unknown as Record<string, unknown>)
-    await patch($, agentId, r => ({ ...revive(r), currentTool: label, toolCalls: r.toolCalls + 1 }))
+    await patch($, agentId, r => ({ ...revive(r), currentTool: label, toolCalls: r.toolCalls + 1, lastActivityAt: Date.now() }))
     try {
       return await next(e)
     } finally {
@@ -289,7 +291,7 @@ export const register: Register = (on, options) => {
     if (e.agentId && u) {
       const tokens =
         (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)
-      if (tokens > 0) await patch($, e.agentId, r => ({ ...revive(r), tokens }))
+      if (tokens > 0) await patch($, e.agentId, r => ({ ...revive(r), tokens, lastActivityAt: Date.now() }))
     }
     return result
   })
@@ -386,16 +388,32 @@ export const register: Register = (on, options) => {
 
     const kids = kidsOf(list, at)
     const roots = kids.get(undefined) ?? []
-    // Blocks differ in height (todos, nested children): keep the roots that fit, top first.
-    const shown: Run[] = []
-    const FOOTER = 2
-    let used = (list.length ? 0 : 1) + FOOTER
-    for (const r of roots) {
-      const h = blockHeight(r, kids)
-      if (used + h > room && shown.length) break
-      used += h
-      shown.push(r)
+    // The footer: a task timeline, agents that need a look, and how many cards didn't fit.
+    const line = timeline(list, await read($, archived))
+    const alerts = attention(list, at, pingMs || 90_000)
+    const MAX_ALERTS = 3
+    const alertRows = Math.min(alerts.length, MAX_ALERTS) + (alerts.length > MAX_ALERTS ? 1 : 0)
+    const timelineRows = line.done + line.current + line.upcoming ? 2 : 0
+    const footerRows = (more: boolean) => {
+      const body = timelineRows + alertRows + (more ? 1 : 0)
+      return body ? body + 1 : 0
     }
+    // Blocks differ in height (todos, nested children): keep the roots that fit, top first.
+    const fit = (reserve: number) => {
+      const out: Run[] = []
+      let h = list.length ? 0 : 1
+      for (const r of roots) {
+        const bh = blockHeight(r, kids)
+        if (h + bh + reserve > room && out.length) break
+        h += bh
+        out.push(r)
+      }
+      return { out, h }
+    }
+    let { out: shown, h: used } = fit(footerRows(false))
+    if (shown.length < roots.length) ({ out: shown, h: used } = fit(footerRows(true)))
+    const hasMore = shown.length < roots.length
+    used += footerRows(hasMore)
     // One agent's block: header, stats, bar, todos; each child sits under the todo that launched it.
     const block = (run: Run, depth: number, seen: Set<string>): JSX.Element => {
       seen.add(keyOf(run))
@@ -450,43 +468,84 @@ export const register: Register = (on, options) => {
         </Box>
       )
     }
-    const o = overview(await read($, totals), list)
-    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
-    // Blank lines push the footer to the bottom of the body.
+    // Render the cards first: `seen` then holds every agent drawn, nested ones included.
+    const seen = new Set<string>()
+    const cards = shown.map(r => block(r, 0, seen))
+    const hidden = list.length - seen.size
+    const [dc, cc, uc] = segments(line, width)
+    // Label widths as drawn: "✓ 12 done", "▸ 3 now", "9 next ○".
+    const gaps = labelGaps(
+      `✓ ${line.done} done`.length,
+      line.current ? `▸ ${line.current} now`.length : 0,
+      `${line.upcoming} next ○`.length,
+      dc,
+      width,
+    )
+    const title = ' tasks '
+    const rule = timelineRows ? `──${title}${'─'.repeat(Math.max(0, width - title.length - 2))}` : '─'.repeat(width)
     const pad = Math.max(0, room - used)
-    const footer = (
+    const footer = footerRows(hasMore) ? (
       <Box flexDirection="column">
         {Array.from({ length: pad }, () => (
           <Text> </Text>
         ))}
-        <Text dimColor wrap="truncate">{'─'.repeat(width)}</Text>
-        <Text wrap="truncate">
-          <Text color="green">✓ </Text>
-          <Text bold>{o.done}</Text>
-          <Text dimColor>{o.done === 1 ? ' agent done' : ' agents done'}</Text>
-          <Text dimColor>  ·  </Text>
-          <Text color="green">▰ </Text>
-          <Text bold>{o.todos}</Text>
-          <Text dimColor>{o.todos === 1 ? ' task done' : ' tasks done'}</Text>
-          {o.running ? (
-            <Text>
-              <Text dimColor>  ·  </Text>
-              <Text color="yellow">{glyph({ status: 'running' } as Run, at)} </Text>
-              <Text bold>{o.running}</Text>
-              <Text dimColor> running</Text>
+        <Text dimColor wrap="truncate">{rule}</Text>
+        {timelineRows ? (
+          <Text wrap="truncate">
+            <Text color="green">✓ </Text>
+            <Text bold>{line.done}</Text>
+            <Text dimColor> done</Text>
+            {' '.repeat(gaps ? gaps[0] : 2)}
+            {line.current ? (
+              <Text>
+                <Text color="yellow">▸ </Text>
+                <Text bold>{line.current}</Text>
+                <Text dimColor> now</Text>
+              </Text>
+            ) : (
+              ''
+            )}
+            {' '.repeat(gaps ? gaps[1] : 2)}
+            <Text bold>{line.upcoming}</Text>
+            <Text dimColor> next ○</Text>
+          </Text>
+        ) : (
+          ''
+        )}
+        {timelineRows ? (
+          <Text wrap="truncate">
+            <Text color="green">{'━'.repeat(dc)}</Text>
+            <Text color="yellow">{'━'.repeat(cc)}</Text>
+            <Text dimColor>{'─'.repeat(uc)}</Text>
+          </Text>
+        ) : (
+          ''
+        )}
+        {hasMore ? (
+          <Text dimColor wrap="truncate">
+            ▼ {hidden} more agent{hidden === 1 ? '' : 's'} not shown
+          </Text>
+        ) : (
+          ''
+        )}
+        {alerts.slice(0, MAX_ALERTS).map(a => (
+          <Button key={`alert-${a.key}`} plain onPress={() => void update($, selected, () => a.key)}>
+            <Text wrap="truncate-end">
+              <Text color={a.kind === 'failed' ? 'red' : 'yellow'}>{a.kind === 'failed' ? '✗ ' : '⚠ '}</Text>
+              <Text color="text">{a.name}</Text>
+              <Text color={a.kind === 'failed' ? 'red' : 'yellow'} dimColor>{`  ${a.detail}`}</Text>
             </Text>
-          ) : (
-            ''
-          )}
-          {o.failed ? <Text color="red">{`  ·  ✗ ${plural(o.failed, 'failure')}`}</Text> : ''}
-          {o.stopped ? <Text color="gray">{`  ·  ■ ${o.stopped} stopped`}</Text> : ''}
-        </Text>
+          </Button>
+        ))}
+        {alerts.length > MAX_ALERTS ? <Text dimColor>  +{alerts.length - MAX_ALERTS} more need a look</Text> : ''}
       </Box>
+    ) : (
+      ''
     )
     return (
       <Box flexDirection="column">
         {list.length === 0 && <Text dimColor>No subagents yet.</Text>}
-        {shown.map(r => block(r, 0, new Set()))}
+        {cards}
         {footer}
       </Box>
     )

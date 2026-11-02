@@ -1,5 +1,5 @@
 // Pure logic for the panel: no `$`, so it is unit-tested directly.
-import type { Run, Todo, TodoStatus, Totals } from '../types'
+import type { Run, Todo, TodoStatus } from '../types'
 
 export const REPORT_TOOL = 'mcp__subagents-panel__report'
 
@@ -180,7 +180,7 @@ export function summary(runs: Run[]): string {
 /** Drops finished runs `keepMs` after they ended; 0 keeps them. Running ones always stay. */
 export function prune(runs: Run[], now: number, keepMs: number): Run[] {
   if (keepMs <= 0) return runs
-  return runs.filter(r => r.status === 'running' || r.endedAt === undefined || now - r.endedAt < keepMs)
+  return runs.filter(r => r.status === 'running' || r.status === 'failed' || r.endedAt === undefined || now - r.endedAt < keepMs)
 }
 
 /** 950 -> "950", 38_568 -> "38.6k", 1_234_567 -> "1.2M". */
@@ -213,25 +213,80 @@ export function rowHeight(run: Run): number {
   return 3 + Math.max(1, run.todos.length)
 }
 
-export const NO_TOTALS: Totals = { done: 0, failed: 0, stopped: 0, todos: 0 }
+/** Session task timeline: done (including agents already gone), current, upcoming. */
+export type Timeline = { done: number; current: number; upcoming: number }
 
-/** Folds runs leaving the list into the session totals (running ones are never removed). */
-export function absorb(totals: Totals, removed: Run[]): Totals {
-  const t = { ...totals }
-  for (const r of removed) {
-    if (r.status === 'done') t.done++
-    else if (r.status === 'failed') t.failed++
-    else if (r.status === 'stopped') t.stopped++
-    t.todos += r.todos.filter(x => x.status === 'done').length
+/** Counts every todo the session has seen; `archived` holds the done todos of rows already pruned. */
+export function timeline(runs: Run[], archived: number): Timeline {
+  const t: Timeline = { done: archived, current: 0, upcoming: 0 }
+  for (const r of runs) {
+    const cur = currentIndex(r)
+    r.todos.forEach((x, i) => {
+      if (x.status === 'done') t.done++
+      else if (r.status !== 'running') return
+      else if (i === cur) t.current++
+      else t.upcoming++
+    })
   }
   return t
 }
 
-/** The footer: totals so far plus what the list still shows. */
-export function overview(totals: Totals, list: Run[]): Totals & { running: number } {
-  const t = absorb(totals, list.filter(r => r.status !== 'running'))
-  const live = list.filter(r => r.status === 'running')
-  return { ...t, todos: t.todos + live.reduce((n, r) => n + r.todos.filter(x => x.status === 'done').length, 0), running: live.length }
+/** Splits `width` cells between done, current and upcoming; any non-zero part gets at least one cell. */
+export function segments(t: Timeline, width: number): [number, number, number] {
+  const parts = [t.done, t.current, t.upcoming]
+  const total = parts.reduce((a, b) => a + b, 0)
+  if (!total || width <= 0) return [0, 0, 0]
+  const exact = parts.map(n => (n / total) * width)
+  const cells = parts.map((n, i) => (n ? Math.max(1, Math.round(exact[i])) : 0))
+  // Rounding can overshoot or fall short: trim the part rounded up the most, or grow the one cut most.
+  let diff = width - cells.reduce((a, b) => a + b, 0)
+  while (diff !== 0) {
+    const over = cells.map((c, i) => c - exact[i])
+    const pick = diff < 0
+      ? over.reduce((b, o, i) => (cells[i] > 1 && (b < 0 || o > over[b]) ? i : b), -1)
+      : over.reduce((b, o, i) => (parts[i] && (b < 0 || o < over[b]) ? i : b), -1)
+    if (pick < 0) break
+    cells[pick] += Math.sign(diff)
+    diff -= Math.sign(diff)
+  }
+  return cells as [number, number, number]
+}
+
+/**
+ * Where the timeline's labels go above the bar: done at the left edge, "now" over the start of
+ * the current segment, next flush right. Returns the two gaps, or undefined when they can't fit.
+ */
+export function labelGaps(left: number, mid: number, right: number, nowAt: number, width: number): [number, number] | undefined {
+  const free = width - left - mid - right
+  if (free < 2) return undefined
+  const start = Math.min(Math.max(nowAt, left + 1), width - right - 1 - mid)
+  return [start - left, width - right - start - mid]
+}
+
+/** A footer line: something that wants a look. */
+export type Alert = { key: string; kind: 'quiet' | 'failed'; name: string; detail: string }
+
+/**
+ * What needs attention: failed agents, and running ones with no sign of life
+ * (tool call, report, model step) for `quietMs`. Failed first, then the quietest.
+ */
+export function attention(runs: Run[], now: number, quietMs: number): Alert[] {
+  const name = (r: Run) => r.description || r.type
+  const failed = runs
+    .filter(r => r.status === 'failed')
+    .map((r): Alert => ({ key: r.agentId ?? r.id, kind: 'failed', name: name(r), detail: `failed${r.failReason ? ` · ${r.failReason}` : ''}` }))
+  const quiet = runs
+    .filter(r => r.status === 'running')
+    .map(r => ({ r, idle: now - Math.max(r.startedAt, r.lastActivityAt ?? 0, r.lastReportAt ?? 0) }))
+    .filter(x => quietMs > 0 && x.idle >= quietMs)
+    .sort((x, y) => y.idle - x.idle)
+    .map(({ r, idle }): Alert => ({
+      key: r.agentId ?? r.id,
+      kind: 'quiet',
+      name: name(r),
+      detail: `quiet ${clock(idle)}${r.currentTool ? ` · ${r.currentTool}` : ''}`,
+    }))
+  return [...failed, ...quiet]
 }
 
 /** "claude-haiku-5-5" -> "haiku 5.5", "claude-opus-4-1-20250805" -> "opus 4.1"; aliases pass through. */
@@ -281,10 +336,11 @@ export function finishTurn(run: Run, reason: string, at: number, list: Run[]): R
   const me = run.agentId ?? run.id
   const waiting = list.some(r => r.parentId === me && r.status === 'running')
   if (waiting) return { ...run, currentTool: undefined }
-  return { ...run, status: reason === 'answer' ? 'done' : 'failed', endedAt: at, currentTool: undefined }
+  if (reason === 'answer') return { ...run, status: 'done', endedAt: at, currentTool: undefined }
+  return { ...run, status: 'failed', failReason: reason, endedAt: at, currentTool: undefined }
 }
 
 /** Activity from an agent marked done or failed means its turn resumed: running again. Stopped stays stopped. */
 export function revive(run: Run): Run {
-  return run.status === 'done' || run.status === 'failed' ? { ...run, status: 'running', endedAt: undefined } : run
+  return run.status === 'done' || run.status === 'failed' ? { ...run, status: 'running', endedAt: undefined, failReason: undefined } : run
 }

@@ -31,10 +31,11 @@ export type Run = {
   etaAt?: number
   lastReportAt?: number
   lastPingAt?: number
+  /** Epoch ms of the agent's last sign of life: a tool call, a report or a model step. */
+  lastActivityAt?: number
+  /** Why a failed agent's turn ended ('error', 'aborted', 'refusal'), when the engine said. */
+  failReason?: string
 }
-
-/** Session totals of agents that already left the list. */
-export type Totals = { done: number; failed: number; stopped: number; todos: number }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -46,8 +47,8 @@ declare module 'claude-code' {
       composing: Shaped<boolean>
       /** The panel's clock, ticked each second while something runs. */
       now: Shaped<number>
-      /** Finished agents and their done todos, kept after their rows leave. */
-      totals: Shaped<Totals>
+      /** Done todos of rows already removed, so the timeline keeps counting them. */
+      archived: Shaped<number>
     }
   }
 }
