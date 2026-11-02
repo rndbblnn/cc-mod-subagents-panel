@@ -45,7 +45,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
   still unseen live. Finished runs draw open todos as `unclosed` (`todoMarks`), never as done.
 
 ## Check
-`claude plugin validate . && claude plugin test .` (39 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (42 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
@@ -53,6 +53,9 @@ An **unasked** `$.ui.open` (from `agent.spawn`, a timer, `session.start`) is onl
 terminal ≥144 columns (≥110 once the person has opened this pane id by hand); narrower, it
 waits undrawn and `isPlaced` is false. So: auto-open falls back to a one-time toast + a
 status line entry ("N subagents running · /subagents"). `/subagents` (asked) seats at any width.
+- `openOnStart` (default on) opens the pane in `session.start` when `isInteractive`. A hot reload
+  re-runs `session.start`, so a `startOpened` `$.state` atom (survives reloads, not sessions)
+  makes it once per session — otherwise every edit would reopen a pane the person closed.
 - **Size to `e.props.bodyColumns`, never `e.viewport.columns`** — viewport is the whole
   terminal, so a docked pane's content sized to it wraps onto extra lines. Rows:
   `e.props.scroll.bodyRows`. Single-line text: `wrap="truncate"`.

@@ -45,6 +45,7 @@ const selected = atom({ plugin: 'subagents-panel', key: 'selected' } as const, n
 const composing = atom({ plugin: 'subagents-panel', key: 'composing' } as const, false, { shape: 'composing-1' })
 const now = atom({ plugin: 'subagents-panel', key: 'now' } as const, 0, { shape: 'now-1' })
 const archived = atom({ plugin: 'subagents-panel', key: 'archived' } as const, 0, { shape: 'archived-1' })
+const startOpened = atom({ plugin: 'subagents-panel', key: 'startOpened' } as const, false, { shape: 'start-opened-1' })
 const doneTodos = (rs: Run[]) => rs.reduce((n, r) => n + r.todos.filter(t => t.status === 'done').length, 0)
 
 const PANE = 'subagents'
@@ -147,6 +148,7 @@ export const register: Register = (on, options) => {
     return Number.isFinite(n) && n >= 0 ? n : d
   }
   const autoOpen = options.autoOpen !== false && options.autoOpen !== 'false'
+  const openOnStart = options.openOnStart !== false && options.openOnStart !== 'false'
   const pingMs = num(options.pingSeconds, 90) * 1000
   const keepMs = num(options.keepFinishedSeconds, 10) * 1000
 
@@ -231,6 +233,17 @@ export const register: Register = (on, options) => {
         }
       })()
     })
+
+    // Open the pane once per session at start; a reload re-runs session.start, and
+    // must not bring back a pane the person closed. Below 144 columns it waits undrawn.
+    if (openOnStart && e.isInteractive && !(await read($, startOpened))) {
+      await update($, startOpened, () => true)
+      try {
+        await openPane($)
+      } catch {
+        // Best effort: never hold up the session's start.
+      }
+    }
     return started
   })
 

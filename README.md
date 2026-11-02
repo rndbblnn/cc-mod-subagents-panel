@@ -162,6 +162,7 @@ What's verified, and what isn't:
 
 | Option | Default | |
 | --- | --- | --- |
+| `openOnStart` | `true` | Open the panel when an interactive session starts (once per session; a hot reload does not reopen it) |
 | `autoOpen` | `true` | Open the panel when any subagent starts |
 | `pingSeconds` | `90` | Ping an agent quiet for this long. `0` = never |
 | `keepFinishedSeconds` | `10` | How long finished cards stay. `0` = until `/subagents clear` |

@@ -1,6 +1,6 @@
 {
   "name": "subagents-panel",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "A live tree of subagents beside the chat: current tool, ordered TODOs, progress, ETA, and message/stop controls.",
   "author": {
     "name": "rndbblnn",
@@ -10,6 +10,12 @@
   "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
+    "openOnStart": {
+      "type": "boolean",
+      "title": "Open the panel when Claude starts",
+      "description": "Open the Subagents pane at the start of every interactive session, before any subagent runs",
+      "default": true
+    },
     "autoOpen": {
       "type": "boolean",
       "title": "Open the panel when a subagent starts",

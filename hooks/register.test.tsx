@@ -183,3 +183,48 @@ test('a stale plan arms one reminder as a step starts; the next tool result carr
   expect(nudged.length).toBe(1)
   expect(nudged[0]).toMatch(/^5\.0:\[subagents-panel\] 4 steps since your last PLAN: line/)
 })
+
+test('the panel opens once when an interactive session starts', async ($, on) => {
+  let opens = 0
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => {
+    opens++
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(opens).toBe(1)
+  // A hot reload runs session.start again: a pane the person closed stays closed.
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(opens).toBe(1)
+})
+
+test('no start-up open for a -p run', async ($, on) => {
+  let opens = 0
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => {
+    opens++
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  expect(opens).toBe(0)
+})
+
+test('openOnStart off: no pane at start', { options: { openOnStart: false } }, async ($, on) => {
+  let opens = 0
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => {
+    opens++
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(opens).toBe(0)
+})

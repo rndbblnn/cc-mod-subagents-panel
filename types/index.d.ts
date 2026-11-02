@@ -57,6 +57,8 @@ declare module 'claude-code' {
       now: Shaped<number>
       /** Done todos of rows already removed, so the timeline keeps counting them. */
       archived: Shaped<number>
+      /** Set once the session's start-up open has run, so a hot reload does not reopen a pane the person closed. */
+      startOpened: Shaped<boolean>
     }
   }
 }
