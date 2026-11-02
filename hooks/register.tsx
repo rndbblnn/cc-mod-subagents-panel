@@ -316,7 +316,8 @@ export const register: Register = (on, options) => {
     const sel = await read($, selected)
     // The pane's own body, inside its frame, not the terminal (`viewport` is the whole screen).
     const width = Math.max(12, e.props.bodyColumns ?? 56)
-    const room = Math.max(4, (e.props.scroll?.bodyRows ?? 24) - 1)
+    // `bodyRows` already leaves out the dock's close-mark row: use all of it.
+    const room = Math.max(4, e.props.scroll?.bodyRows ?? 24)
 
     const pick = sel ? list.find(r => keyOf(r) === sel) : undefined
     if (pick) {
