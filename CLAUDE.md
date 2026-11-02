@@ -32,9 +32,20 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
   `claude-code-guide` agent: plan and ETA showed within 4 s; it never sent an update in a 19 s run.
 - `turn.step` streams: a test's mock must be an `async function*`, and the test must read the
   stream (`for await (… of $.turn.step(…))`) or no hook runs.
+- **The engine runs a step's tools while the step still streams** (seen live 2026-11-02: a
+  reminder decided inside `tool.call` told an agent "not reported yet" though its PLAN: line was
+  in that same step). Reading the plan from `text` chunks before yielding the `tool` chunk did NOT
+  fix it live: the engine starts tools from its own stream. So decide nothing mid-step.
+- **Stale plans:** a Sonnet agent wrote its PLAN: line once and never updated it (2 runs). Fix:
+  as a `turn.step` starts (every earlier step fully read), `nudgeDue` arms a reminder once the
+  agent has gone `NUDGE_STEPS` (4) steps without reporting, at most every 30 s; the next tool
+  result carries it as `context` (`withNudge`). Steps, not tool calls: parallel lookups are one
+  step. `withNudge` runs after the tool, so it must never throw (the gating `.catch` would rerun
+  the tool). `reportVia` picks the wording. Status pings via `$.session.send` stay as a backstop,
+  still unseen live. Finished runs draw open todos as `unclosed` (`todoMarks`), never as done.
 
 ## Check
-`claude plugin validate . && claude plugin test .` (33 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (39 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)

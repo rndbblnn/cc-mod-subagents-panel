@@ -13,9 +13,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-111111?style=flat-square)](LICENSE)
 [![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-d97757?style=flat-square)](https://docs.claude.com/en/docs/claude-code)
 [![Version](https://img.shields.io/github/v/tag/rndbblnn/cc-mod-subagents-panel?style=flat-square&label=version&color=111111)](https://github.com/rndbblnn/cc-mod-subagents-panel/tags)
-![~1000 lines](https://img.shields.io/badge/source-~1000%20lines-111111?style=flat-square)
+![~1100 lines](https://img.shields.io/badge/source-~1100%20lines-111111?style=flat-square)
 ![0 dependencies](https://img.shields.io/badge/dependencies-0-111111?style=flat-square)
-![33 tests](https://img.shields.io/badge/tests-33%20passing-3fb950?style=flat-square)
+![39 tests](https://img.shields.io/badge/tests-39%20passing-3fb950?style=flat-square)
 
 **[Install](#install-30-seconds)** · **[Anatomy](#anatomy-of-a-card)** · **[How it works](#how-it-works)** · **[Limits](#evidence-and-limits)** · **[FAQ](#faq)**
 
@@ -76,6 +76,7 @@ Restart Claude Code. The next subagent opens the panel on the right.
 
 - **Sorted by ETA**, longest first, so what you're waiting on is always on top.
 - **Live tool call** next to the current task: `▸ Run the test suite · Bash: cargo test`.
+- **No stale plans.** After 4 model steps with no update, the agent's next tool result carries a one-line reminder to refresh its plan (at most every 30 s; you never see it). A finished agent's unclosed todos show as a dim `·`, never as done.
 - **Finished cards leave after 10 s.** Failed ones stay until `/subagents clear`. The background is your terminal's own.
 - **The footer only says what's useful:** where the session's work stands, what's off-screen, and which agents need a look. Nothing to say, no footer.
 
@@ -109,6 +110,7 @@ sequenceDiagram
         A-->>P: turn.step  (context tokens)
         A->>P: report(...) on each todo
     end
+    P-->>A: plan reminder in a tool result after 4 steps with no update
     P-->>A: status ping if quiet for 90 s
     A-->>P: turn.complete
     P->>P: done, unless a child is still running
@@ -118,8 +120,8 @@ sequenceDiagram
 | --- | --- |
 | `agent.spawn` | Appends the brief, adds a card, records the parent's current todo. A repeat spawn is a resume: the card is revived, not reset |
 | `tool.call` · `report` | Stores the ordered todos and ETA |
-| `tool.call` · any other | Shows the live call (`Bash: cargo test`), counts calls |
-| `turn.step` | Reads usage: input + cache + output = context tokens. Reads a `PLAN:` line from the step's text, for agents that can't call the report tool |
+| `tool.call` · any other | Shows the live call (`Bash: cargo test`), counts calls, adds the plan reminder to the result when one is due |
+| `turn.step` | Reads usage: input + cache + output = context tokens. Reads a `PLAN:` line from the step's text, for agents that can't call the report tool. Arms the plan reminder when a step starts and the plan is 4 steps old |
 | `turn.complete` | Marks the agent done, unless one of its own children still runs (it's waiting) |
 | `ui.render` · `Pane` | Draws the tree: cards fit whole, top first, children nested under their todo |
 | `session.start` | Registers the tool and `/subagents`, starts a 1 s tick for spinners, pings, cleanup and a reconcile against `$.agent.list()` |
@@ -130,9 +132,9 @@ sequenceDiagram
 
 | File | Lines | What's in it |
 | --- | --: | --- |
-| [`hooks/model.ts`](hooks/model.ts) | 399 | Pure logic: tree, sort, ETA, ping schedule, timeline, alerts, `PLAN:` lines. No I/O, fully unit-tested |
-| [`hooks/register.tsx`](hooks/register.tsx) | 562 | The seven hooks and the JSX the panel draws |
-| [`types/index.d.ts`](types/index.d.ts) | 54 | The state contract: `Run`, `Todo` |
+| [`hooks/model.ts`](hooks/model.ts) | 458 | Pure logic: tree, sort, ETA, ping schedule, timeline, alerts, `PLAN:` lines. No I/O, fully unit-tested |
+| [`hooks/register.tsx`](hooks/register.tsx) | 596 | The seven hooks and the JSX the panel draws |
+| [`types/index.d.ts`](types/index.d.ts) | 62 | The state contract: `Run`, `Todo` |
 
 Zero runtime dependencies: every import is from Claude Code itself. No background process, no network, no files written. State lives in the session (`$.state`) and dies with it.
 
@@ -140,7 +142,7 @@ Zero runtime dependencies: every import is from Claude Code itself. No backgroun
 
 What's verified, and what isn't:
 
-- ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 33 unit and render tests.
+- ✅ **Plans, progress, ETA, tokens, nesting, sorting, cleanup, footer**: verified in live sessions with parallel and nested agents, plus 39 unit and render tests.
 - ⚠️ **Stop** uses `TaskStop` through the mod's tool-call API, which isn't a documented mod surface. If Claude Code refuses it, a toast says why.
 - ⚠️ **Needs-attention alerts** (quiet or failed agents) are covered by tests, not yet seen in a live session.
 - ⚠️ **Status pings** (`$.session.send`) haven't been confirmed delivered in live testing yet. A ping that fails now says so in a toast, with the reason.

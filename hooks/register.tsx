@@ -4,7 +4,10 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Run } from '../types'
 import {
   BRIEF,
-  PING,
+  pingFor,
+  nudgeDue,
+  nudgeFor,
+  todoMarks,
   REPORT_TOOL,
   applyReport,
   parsePlanLine,
@@ -85,6 +88,23 @@ async function patch($: EngineInterface, agentId: string, fn: (r: Run) => Run): 
     }),
   )
   return hit
+}
+
+/**
+ * A tool result with a stale-plan reminder appended, when one is due; undefined
+ * otherwise. Never throws: the tool already ran, and a failure here must not rerun it.
+ */
+async function withNudge($: EngineInterface, agentId: string, res: unknown): Promise<unknown> {
+  try {
+    const r = res as { deny?: string; context?: readonly string[] }
+    if (r.deny !== undefined) return undefined
+    const run = (await read($, runs)).find(x => x.agentId === agentId)
+    if (!run?.nudgeArmed) return undefined
+    await patch($, agentId, x => ({ ...x, nudgeArmed: false }))
+    return { ...r, context: [...(r.context ?? []), nudgeFor(run)] }
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -191,7 +211,7 @@ export const register: Register = (on, options) => {
         if (++tick % 5 !== 0) return
         for (const r of dueForPing(list, at, pingMs)) {
           await patch($, r.agentId!, x => ({ ...x, lastPingAt: at }))
-          await sendTo($, r, PING, 'Status ping', true)
+          await sendTo($, r, pingFor(r), 'Status ping', true)
         }
         // Reconcile with the engine's own view: catches stops and kills we did not see.
         try {
@@ -268,7 +288,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: REPORT_TOOL }, async ($, e) => {
     const agentId = e.agentId
     if (!agentId) return { result: 'ignored: only subagents report to the panel' }
-    const hit = await patch($, agentId, r => applyReport(revive(r), e as unknown as ReportInput, Date.now()))
+    const hit = await patch($, agentId, r => ({ ...applyReport(revive(r), e as unknown as ReportInput, Date.now()), reportVia: 'tool' }))
     return { result: hit ? 'ok' : `ignored: no panel row for agent ${agentId}` }
   }).catch(() => ({ result: 'ok (panel update failed; carry on)' }))
 
@@ -279,24 +299,34 @@ export const register: Register = (on, options) => {
     const label = describeCall(e.tool, e as unknown as Record<string, unknown>)
     await patch($, agentId, r => ({ ...revive(r), currentTool: label, toolCalls: r.toolCalls + 1, lastActivityAt: Date.now() }))
     try {
-      return await next(e)
+      const res = await next(e)
+      return ((await withNudge($, agentId, res)) ?? res) as typeof res
     } finally {
       await patch($, agentId, r => (r.currentTool === label ? { ...r, currentTool: undefined } : r))
     }
   }).catch(($, e, next) => next(e))
 
-  // Each model step of a subagent: its context size, shown as tokens on the stats line.
+  // Each model step of a subagent: its context size, shown as tokens on the stats line, and its
+  // PLAN: line (agents whose tools: allowlist leaves out the report tool report that way).
+  // A stale plan arms a reminder as a step starts; its next tool result carries it. The engine
+  // runs a step's tools while the step still streams, so nothing here is decided mid-step.
   on('turn.step', async function* ($, e, next) {
+    const agentId = e.agentId
+    if (!agentId) return yield* next(e)
+    const at = Date.now()
+    await patch($, agentId, r => (nudgeDue(r, at) ? { ...r, nudgeArmed: true, lastNudgeAt: at } : r)).catch(() => false)
     const result = yield* next(e)
     const u = result.usage
-    if (e.agentId && u) {
-      const tokens =
-        (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)
-      if (tokens > 0) await patch($, e.agentId, r => ({ ...revive(r), tokens, lastActivityAt: Date.now() }))
-    }
-    // Agents whose tools: allowlist leaves out the report tool report with a PLAN: line instead.
-    const plan = e.agentId ? parsePlanLine(result.answer) : undefined
-    if (e.agentId && plan) await patch($, e.agentId, r => applyReport(revive(r), plan, Date.now()))
+    const tokens = u
+      ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0)
+      : 0
+    await patch($, agentId, r => ({
+      ...revive(r),
+      steps: (r.steps ?? 0) + 1,
+      ...(tokens > 0 ? { tokens, lastActivityAt: Date.now() } : {}),
+    }))
+    const plan = parsePlanLine(result.answer)
+    if (plan) await patch($, agentId, r => ({ ...applyReport(revive(r), plan, Date.now()), reportVia: r.reportVia ?? 'line' }))
     return result
   })
 
@@ -358,13 +388,13 @@ export const register: Register = (on, options) => {
           <Text> </Text>
           <Text bold>TODOs</Text>
           {pick.todos.length === 0 && <Text dimColor>No TODOs reported yet.</Text>}
-          {pick.todos.map((t, i) => (
+          {todoMarks(pick).map((m, i) => (
             <Text
-              color={t.status === 'in_progress' ? 'cyan' : undefined}
-              dimColor={t.status === 'done'}
-              strikethrough={t.status === 'done'}
+              color={m === 'current' ? 'cyan' : undefined}
+              dimColor={m === 'done' || m === 'unclosed'}
+              strikethrough={m === 'done'}
             >
-              {String(i + 1).padStart(2)}. {t.status === 'done' ? '✓' : t.status === 'in_progress' ? '▸' : '○'} {t.text}
+              {String(i + 1).padStart(2)}. {m === 'done' ? '✓' : m === 'current' ? '▸' : m === 'unclosed' ? '·' : '○'} {pick.todos[i].text}
             </Text>
           ))}
           <Text> </Text>
@@ -373,7 +403,7 @@ export const register: Register = (on, options) => {
               {Input && (
                 <Button key="msg" label="message" hotkey="m" plain onPress={() => void update($, composing, () => true)} />
               )}
-              <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void sendTo($, pick, PING, 'ETA request')} />
+              <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void sendTo($, pick, pingFor(pick), 'ETA request')} />
               <Button key="stop" label="stop" hotkey="s" plain onPress={() => void stopRun($, pick)} />
             </Box>
           )}
@@ -432,7 +462,7 @@ export const register: Register = (on, options) => {
       const barWidth = Math.max(4, width - indent.length - 2)
       const mine = (kids.get(keyOf(run)) ?? []).filter(k => !seen.has(keyOf(k)))
       const under = (slot: number) => mine.filter(k => slotOf(run, k) === slot).map(k => block(k, depth + 2, seen))
-      const cur = currentIndex(run)
+      const marks = todoMarks(run)
       return (
         <Box flexDirection="column">
           <Button key={`row-${keyOf(run)}`} plain onPress={() => void update($, selected, () => keyOf(run))}>
@@ -455,14 +485,18 @@ export const register: Register = (on, options) => {
           ) : (
             run.todos.map((t, i) => (
               <Box flexDirection="column">
-                {i === cur ? (
+                {marks[i] === 'current' ? (
                   <Text wrap="truncate-end">
                     {indent}  <Text color="yellow">▸</Text> <Text color="text">{t.text}</Text>
                     {run.currentTool ? <Text dimColor> · {run.currentTool}</Text> : ''}
                   </Text>
-                ) : t.status === 'done' ? (
+                ) : marks[i] === 'done' ? (
                   <Text wrap="truncate-end">
                     {indent}  <Text color="green">✓</Text> <Text dimColor>{t.text}</Text>
+                  </Text>
+                ) : marks[i] === 'unclosed' ? (
+                  <Text dimColor wrap="truncate-end">
+                    {indent}  · {t.text}
                   </Text>
                 ) : (
                   <Text dimColor wrap="truncate-end">

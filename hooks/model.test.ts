@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree , parsePlanLine } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree, parsePlanLine, todoMarks, pingFor, nudgeDue, nudgeFor } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -271,5 +271,49 @@ describe('PLAN line (agents without the report tool)', () => {
   })
   test('an eta-only line keeps the todos and moves the eta', () => {
     expect(parsePlanLine('PLAN: eta 45')).toEqual({ eta_seconds: 45 })
+  })
+})
+
+describe('stale plans', () => {
+  const base: Run = {
+    id: 'a', agentId: 'a', type: 't', model: 'm', description: 'd', status: 'running', startedAt: 0, toolCalls: 0,
+    todos: [
+      { text: 'one', status: 'done' },
+      { text: 'two', status: 'in_progress' },
+      { text: 'three', status: 'pending' },
+    ],
+  }
+  test('a running agent has a current todo; a finished one leaves its open todos unclosed, never done', () => {
+    expect(todoMarks(base)).toEqual(['done', 'current', 'pending'])
+    expect(todoMarks({ ...base, status: 'done' })).toEqual(['done', 'unclosed', 'unclosed'])
+    expect(todoMarks({ ...base, status: 'failed' })).toEqual(['done', 'unclosed', 'unclosed'])
+  })
+  test('the ping matches how the agent reports', () => {
+    expect(pingFor({ ...base, reportVia: 'line' })).toContain('PLAN: line is out of date')
+    expect(pingFor({ ...base, reportVia: 'tool' })).toContain('call `mcp__subagents-panel__report`')
+    expect(pingFor(base)).toContain('if you have it')
+  })
+})
+
+describe('stale-plan reminder', () => {
+  const run: Run = {
+    id: 'a', agentId: 'a', type: 't', model: 'm', description: 'd', status: 'running', startedAt: 0,
+    toolCalls: 9, steps: 6, stepsAtReport: 2, todos: [{ text: 'x', status: 'in_progress' }],
+  }
+  test('armed after 4 steps since the last report, once, at most every 30 s, only while running', () => {
+    expect(nudgeDue(run, 100_000)).toBe(true)
+    expect(nudgeDue({ ...run, steps: 5 }, 100_000)).toBe(false)
+    expect(nudgeDue({ ...run, nudgeArmed: true }, 100_000)).toBe(false)
+    expect(nudgeDue({ ...run, lastNudgeAt: 80_000 }, 100_000)).toBe(false)
+    expect(nudgeDue({ ...run, lastNudgeAt: 60_000 }, 100_000)).toBe(true)
+    expect(nudgeDue({ ...run, status: 'done' }, 100_000)).toBe(false)
+  })
+  test('a report resets the count', () => {
+    expect(applyReport(run, { eta_seconds: 10 }, 0).stepsAtReport).toBe(6)
+  })
+  test("speaks the agent's route", () => {
+    expect(nudgeFor({ ...run, reportVia: 'line' })).toMatch(/^\[subagents-panel\] 4 steps since your last PLAN: line/)
+    expect(nudgeFor({ ...run, reportVia: 'tool' })).toContain('call `mcp__subagents-panel__report`')
+    expect(nudgeFor(run)).toContain('not reported your plan yet')
   })
 })

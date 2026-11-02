@@ -16,6 +16,52 @@ export const PING =
   `[subagents-panel] Status check: please report now, with \`${REPORT_TOOL}\` if you have it, ` +
   'otherwise with a `PLAN: [x] … | [>] … | [ ] … | eta <seconds>` line, then carry on.'
 
+export const PING_TOOL =
+  `[subagents-panel] Status check: please call \`${REPORT_TOOL}\` now with your updated ordered todos ` +
+  'and a fresh eta_seconds, then carry on.'
+
+export const PING_LINE =
+  '[subagents-panel] Status check: your last PLAN: line is out of date. Write it again now, on its own line: ' +
+  'every finished todo as [x], the one you are on as [>], the rest as [ ], and a fresh eta in seconds. ' +
+  'Then carry on, and rewrite it each time a todo finishes.'
+
+export const NUDGE_STEPS = 4
+export const NUDGE_GAP_MS = 30_000
+
+const sinceReport = (run: Run) => (run.steps ?? 0) - (run.stepsAtReport ?? 0)
+
+/**
+ * Whether to arm a plan reminder for a running agent, checked as a model step starts
+ * (every earlier step's text has been read by then): NUDGE_STEPS steps since it last
+ * reported, none armed already, and none in NUDGE_GAP_MS. Steps, not tool calls: a
+ * step of five parallel lookups is one stretch of work.
+ */
+export function nudgeDue(run: Run, now: number): boolean {
+  if (run.status !== 'running' || run.nudgeArmed) return false
+  if (sinceReport(run) < NUDGE_STEPS) return false
+  return now - (run.lastNudgeAt ?? 0) >= NUDGE_GAP_MS
+}
+
+/** The reminder, in the agent's own reporting route; it may be ignored when nothing changed. */
+export function nudgeFor(run: Run): string {
+  const n = sinceReport(run)
+  if (run.reportVia === 'line')
+    return `[subagents-panel] ${n} steps since your last PLAN: line. If a todo finished or your plan changed, ` +
+      'write the updated line now, on its own line: [x] done, [>] current, [ ] not started, and a fresh eta in seconds. ' +
+      'Otherwise ignore this.'
+  if (run.reportVia === 'tool')
+    return `[subagents-panel] ${n} steps since your last report. If a todo finished or your plan changed, ` +
+      `call \`${REPORT_TOOL}\` now with the updated todos and eta_seconds. Otherwise ignore this.`
+  return '[subagents-panel] You have not reported your plan yet. ' +
+    `Call \`${REPORT_TOOL}\` if you have it; otherwise write one line: ` +
+    'PLAN: [x] done | [>] current | [ ] not started | eta <seconds>.'
+}
+
+/** The status ping that fits how this agent reports. */
+export function pingFor(run: Run): string {
+  return run.reportVia === 'line' ? PING_LINE : run.reportVia === 'tool' ? PING_TOOL : PING
+}
+
 const MARKS: [RegExp, TodoStatus][] = [
   [/^\[\s*[xX✓✔]\s*\]\s*|^[✓✔]\s*/, 'done'],
   [/^\[\s*[>~▸*-]\s*\]\s*|^[▸>]\s*/, 'in_progress'],
@@ -94,6 +140,7 @@ export function applyReport(run: Run, input: ReportInput, at: number): Run {
     etaAt: eta ?? run.etaAt,
     note: typeof input.note === 'string' ? input.note.trim() || undefined : run.note,
     lastReportAt: at,
+    stepsAtReport: run.steps ?? 0,
   }
 }
 
@@ -259,6 +306,18 @@ export function currentIndex(run: Run): number {
   const at = run.todos.findIndex(t => t.status === 'in_progress')
   if (at >= 0) return at
   return run.status === 'running' ? run.todos.findIndex(t => t.status === 'pending') : -1
+}
+
+export type TodoMark = 'current' | 'done' | 'pending' | 'unclosed'
+
+/**
+ * How each todo draws. A finished agent has no current todo: what it left open is
+ * `unclosed`, drawn as such, never as done.
+ */
+export function todoMarks(run: Run): TodoMark[] {
+  const live = run.status === 'running'
+  const cur = live ? currentIndex(run) : -1
+  return run.todos.map((t, i) => (i === cur ? 'current' : t.status === 'done' ? 'done' : live ? 'pending' : 'unclosed'))
 }
 
 /** Lines a row takes: name, stats, bar, then every todo (or one activity line). */

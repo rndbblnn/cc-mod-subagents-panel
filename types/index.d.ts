@@ -30,6 +30,14 @@ export type Run = {
   /** Epoch ms the agent expects to finish, from its last report. */
   etaAt?: number
   lastReportAt?: number
+  /** How it reports: the report tool, or PLAN: lines (its tools: allowlist leaves the tool out). */
+  reportVia?: 'tool' | 'line'
+  /** Model steps finished, and the count when it last reported: how stale its plan is. */
+  steps?: number
+  stepsAtReport?: number
+  /** A stale-plan reminder waits for its next tool result; when one was last armed. */
+  nudgeArmed?: boolean
+  lastNudgeAt?: number
   lastPingAt?: number
   /** Epoch ms of the agent's last sign of life: a tool call, a report or a model step. */
   lastActivityAt?: number

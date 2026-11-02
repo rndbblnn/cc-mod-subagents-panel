@@ -121,6 +121,7 @@ test('an agent without the report tool reports with a PLAN line in its text', as
     prompt = e.prompt
     return { agentId: 'a1', model: 'claude-sonnet-5-5' }
   })
+  on('turn.complete', () => ({ text: '' }))
   on('turn.step', async function* (_: unknown, e: { turnId: string; index: number }) {
     return {
     turnId: e.turnId,
@@ -142,4 +143,43 @@ test('an agent without the report tool reports with a PLAN line in its text', as
   expect(await ui.find({ type: 'Text', text: /patch outbox/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /ETA/ })).toBeTruthy()
   await ui.unmount()
+
+  // It finishes without closing its plan: the open todos show as unclosed, not as current or done.
+  await $.turn.complete({ agentId: 'a1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1' } as never)
+  const after = await $.ui.mount(PANE)
+  expect((await after.find({ type: 'Text', text: /patch outbox/ }))?.text).toMatch(/·\s+patch outbox/)
+  expect((await after.find({ type: 'Text', text: /run tests/ }))?.text).toMatch(/·\s+run tests/)
+  await after.unmount()
+})
+
+test('a stale plan arms one reminder as a step starts; the next tool result carries it', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-sonnet-5-5' }))
+  on('tool.call', () => ({ result: 'ok' }))
+  // Step 0 writes the plan; later steps only work. Each step's tool runs while it streams.
+  on('turn.step', async function* (_: unknown, e: { turnId: string; index: number }) {
+    yield { kind: 'tool', index: 0, id: `tu${e.index}`, name: 'Read' }
+    const answer = e.index === 0 ? 'PLAN: [>] a | [ ] b | eta 60' : ''
+    return { turnId: e.turnId, index: e.index, answer, toolUses: [], stopReason: 'tool_use', usage: null }
+  } as never)
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'x', description: 'stale', subagentType: 'app-engineer' } as never)
+  const got: string[] = []
+  for (let step = 0; step < 7; step++) {
+    for await (const chunk of $.turn.step({ turnId: 't1', index: step, model: 'm', messageCount: 1, agentId: 'a1' } as never) as never as AsyncIterable<{ kind: string }>) {
+      if (chunk.kind !== 'tool') continue
+      for (let i = 0; i < 3; i++) {
+        const r = (await $.tool.call({ tool: 'Read', file_path: `/s${step}/${i}`, agentId: 'a1' } as never)) as { context?: readonly string[] }
+        got.push(`${step}.${i}:${(r.context ?? []).join('')}`)
+      }
+    }
+  }
+  const nudged = got.filter(g => g.includes('[subagents-panel]'))
+  // Steps 1-4 do not report; step 5 starts 4 steps after the report: its first call carries it.
+  expect(nudged.length).toBe(1)
+  expect(nudged[0]).toMatch(/^5\.0:\[subagents-panel\] 4 steps since your last PLAN: line/)
 })
