@@ -57,3 +57,6 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
   in the same turn as an edit that bumped `runs-1`→`runs-2` got "no panel row" for every report:
   their rows were written under the old shape, and the reloaded module started from `[]`. Spawns
   after the reload were fine. When testing a shape change live, spawn test agents in a later turn.
+- **A docked pane shows one row more than `scroll.bodyRows`** (2.1.316, measured live): `room` is
+  `bodyRows + 1` when `placement === 'dock'`, or a blank row sits under the footer. Pinning the
+  footer with `height="100%"` + a `flexGrow` spacer does not work: the pane body has no fixed height.
