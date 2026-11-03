@@ -228,3 +228,55 @@ test('openOnStart off: no pane at start', { options: { openOnStart: false } }, a
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(opens).toBe(0)
 })
+
+test('open shows the agent transcript in the main view, and ← main goes back', async ($, on) => {
+  const views: unknown[] = []
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))
+  on('ui.view', (_, e) => {
+    views.push(e)
+    return { value: {} }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'x', description: 'look', subagentType: 'Explore' } as never)
+
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'row-a1' })
+  await ui.press({ key: 'view' })
+  expect(views).toEqual([{ agentId: 'a1' }])
+  expect(await ui.find({ type: 'Button', key: 'msg' })).toBeTruthy()
+  await ui.unmount()
+
+  // With a1 on screen the button goes back, and message is hidden (Enter already reaches it).
+  const viewed = await $.ui.mount({ ...PANE, props: { ...PANE.props, view: { agentId: 'a1' } } } as never)
+  expect(await viewed.find({ type: 'Button', key: 'msg' })).toBeFalsy()
+  await viewed.press({ key: 'view' })
+  expect(views).toEqual([{ agentId: 'a1' }, {}])
+  await viewed.unmount()
+})
+
+test('a refused view says why in a toast', async ($, on) => {
+  const toasts: string[] = []
+  on('command.register', () => ({ value: { command: 'subagents' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__subagents-panel__report' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))
+  on('ui.view', () => ({ value: { deny: 'no agent holds the id' } }))
+  on('ui.toast', (_, e) => {
+    toasts.push(String((e as { text?: string }).text ?? e))
+    return { value: undefined }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'x', description: 'look', subagentType: 'Explore' } as never)
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'row-a1' })
+  await ui.press({ key: 'view' })
+  expect(toasts.some(t => t.includes('no agent holds the id'))).toBe(true)
+  await ui.unmount()
+})

@@ -141,6 +141,19 @@ async function stopRun($: EngineInterface, run: Run): Promise<string> {
   }
 }
 
+/**
+ * Shows the agent's transcript in the main view, or the main conversation when
+ * `agentId` is absent. The engine only allows it from the person's own input (a press).
+ */
+async function viewRun($: EngineInterface, agentId: string | undefined, name: string): Promise<void> {
+  try {
+    const r = await $.ui.view(agentId ? { agentId } : {})
+    if (r.deny) await $.ui.toast(`Can't open ${name}: ${r.deny}`)
+  } catch (err) {
+    await $.ui.toast(`Can't open ${name}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 export const register: Register = (on, options) => {
   // Options arrive as set in /config or settings.json: numbers, numeric strings, or unset.
   const num = (v: unknown, d: number) => {
@@ -371,6 +384,7 @@ export const register: Register = (on, options) => {
     const room = Math.max(4, (e.props.scroll?.bodyRows ?? 24) + (e.props.placement === 'dock' && !statusShown ? 1 : 0))
 
     const pick = sel ? list.find(r => keyOf(r) === sel) : undefined
+    const viewing = e.props.view?.agentId
     if (pick) {
       const isComposing = await read($, composing)
       const { done, total } = progress(pick)
@@ -411,13 +425,23 @@ export const register: Register = (on, options) => {
             </Text>
           ))}
           <Text> </Text>
-          {pick.status === 'running' && pick.agentId && !isComposing && (
+          {pick.agentId && !isComposing && (
             <Box gap={2}>
-              {Input && (
+              {viewing === pick.agentId ? (
+                <Button key="view" label="← main" hotkey="o" plain onPress={() => void viewRun($, undefined, 'the main conversation')} />
+              ) : (
+                <Button key="view" label="open" hotkey="o" plain onPress={() => void viewRun($, pick.agentId, pick.type)} />
+              )}
+              {/* While its transcript is open, the prompt's Enter already goes to the agent. */}
+              {pick.status === 'running' && Input && viewing !== pick.agentId && (
                 <Button key="msg" label="message" hotkey="m" plain onPress={() => void update($, composing, () => true)} />
               )}
-              <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void sendTo($, pick, pingFor(pick), 'ETA request')} />
-              <Button key="stop" label="stop" hotkey="s" plain onPress={() => void stopRun($, pick)} />
+              {pick.status === 'running' && (
+                <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void sendTo($, pick, pingFor(pick), 'ETA request')} />
+              )}
+              {pick.status === 'running' && (
+                <Button key="stop" label="stop" hotkey="s" plain onPress={() => void stopRun($, pick)} />
+              )}
             </Box>
           )}
           {isComposing && pick.agentId && Input && (
@@ -482,6 +506,7 @@ export const register: Register = (on, options) => {
             {indent}
             <Text color={statusColor(run)}>{glyph(run, at)}</Text> <Text bold>{run.type}</Text>
             <Text dimColor>  {shortModel(run.model)}</Text>
+            {run.agentId && run.agentId === viewing ? <Text color="cyan"> · open</Text> : null}
           </Button>
           <Text wrap="truncate">
             {indent}  <Text dimColor>{st.text}</Text>
