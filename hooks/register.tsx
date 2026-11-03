@@ -111,19 +111,23 @@ async function withNudge($: EngineInterface, agentId: string, res: unknown): Pro
 /**
  * Sends `text` to a running agent. `$.session.send` does not throw on a failed
  * delivery, it answers `{ isDelivered: false, reason }`: say so in a toast.
+ * `background` sends (timer pings nobody asked for) stay silent either way: in
+ * auto mode each one is judged by the classifier like a SendMessage call, and a
+ * missing verdict would toast every `pingSeconds`. The footer's alerts already
+ * flag a silent agent.
  */
-async function sendTo($: EngineInterface, run: Run, text: string, what: string, quietOnSuccess = false): Promise<boolean> {
+async function sendTo($: EngineInterface, run: Run, text: string, what: string, background = false): Promise<boolean> {
   if (!run.agentId) return false
   try {
     const sent = await $.session.send({ to: { agentId: run.agentId }, text })
     if (!sent.isDelivered) {
-      await $.ui.toast(`${what} to ${run.type} not delivered: ${sent.reason}`)
+      if (!background) await $.ui.toast(`${what} to ${run.type} not delivered: ${sent.reason}`)
       return false
     }
-    if (!quietOnSuccess) await $.ui.toast(`${what} sent to ${run.type}`)
+    if (!background) await $.ui.toast(`${what} sent to ${run.type}`)
     return true
   } catch (err) {
-    await $.ui.toast(`${what} to ${run.type} failed: ${err instanceof Error ? err.message : String(err)}`)
+    if (!background) await $.ui.toast(`${what} to ${run.type} failed: ${err instanceof Error ? err.message : String(err)}`)
     return false
   }
 }
