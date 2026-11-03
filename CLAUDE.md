@@ -62,7 +62,7 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
 - **`$.session.send` does not throw on failure** — it resolves `{ isDelivered: false, reason }`.
   Always go through `sendTo()`, which toasts the reason. (The first auto-ping test, 2026-11-01,
   reached nobody and nothing said so.)
-- Rows sort by `byEta(now)`: running with ETA (longest first), running without, finished.
+- Rows sort by `byElapsed(now)`: longest elapsed first, whatever the status (siblings too).
   The list fills from the top.
 - Nesting: at `agent.spawn` the child records the parent's current todo (`parentTodo`);
   the list renders recursively (`block()`), each child under that todo (`slotOf`), and

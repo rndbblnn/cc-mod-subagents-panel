@@ -208,24 +208,14 @@ export function doing(run: Run): string {
 
 export type Row = { run: Run; depth: number }
 
-/**
- * Sibling order: running agents with an ETA, longest remaining first; then running
- * ones without an ETA, oldest first; then finished ones, latest ended first.
- */
-export function byEta(now: number) {
-  const rank = (r: Run) => (r.status !== 'running' ? 2 : etaLeft(r, now) === undefined ? 1 : 0)
-  return (a: Run, b: Run): number => {
-    const ra = rank(a)
-    const rb = rank(b)
-    if (ra !== rb) return ra - rb
-    if (ra === 0) return (etaLeft(b, now) ?? 0) - (etaLeft(a, now) ?? 0)
-    if (ra === 1) return a.startedAt - b.startedAt
-    return (b.endedAt ?? 0) - (a.endedAt ?? 0)
-  }
+/** Sibling order: longest elapsed first, running or finished alike; ties keep the older start first. */
+export function byElapsed(now: number) {
+  const elapsed = (r: Run) => (r.endedAt ?? now) - r.startedAt
+  return (a: Run, b: Run): number => elapsed(b) - elapsed(a) || a.startedAt - b.startedAt
 }
 
 /**
- * Flattens runs into a tree by parent, siblings sorted by `byEta`. A run whose
+ * Flattens runs into a tree by parent, siblings sorted by `byElapsed`. A run whose
  * parent is unknown (finished and pruned, or never seen) hangs off the root.
  */
 export function tree(runs: Run[], now = 0): Row[] {
@@ -238,7 +228,7 @@ export function tree(runs: Run[], now = 0): Row[] {
   const out: Row[] = []
   const seen = new Set<string>()
   const walk = (parent: string | undefined, depth: number) => {
-    for (const r of [...(kids.get(parent) ?? [])].sort(byEta(now))) {
+    for (const r of [...(kids.get(parent) ?? [])].sort(byElapsed(now))) {
       const key = r.agentId ?? r.id
       if (seen.has(key)) continue
       seen.add(key)
@@ -408,7 +398,7 @@ export function shortModel(model: string): string {
   return parts ? `${parts[1]} ${parts[2]}${parts[3] ? `.${parts[3]}` : ''}` : m
 }
 
-/** Children by parent key (undefined = roots), each list sorted by `byEta`. Unknown parents count as roots. */
+/** Children by parent key (undefined = roots), each list sorted by `byElapsed`. Unknown parents count as roots. */
 export function kidsOf(runs: Run[], now: number): Map<string | undefined, Run[]> {
   const ids = new Set(runs.map(r => r.agentId ?? r.id))
   const out = new Map<string | undefined, Run[]>()
@@ -416,7 +406,7 @@ export function kidsOf(runs: Run[], now: number): Map<string | undefined, Run[]>
     const p = r.parentId && ids.has(r.parentId) && r.parentId !== (r.agentId ?? r.id) ? r.parentId : undefined
     out.set(p, [...(out.get(p) ?? []), r])
   }
-  for (const [k, v] of out) out.set(k, v.sort(byEta(now)))
+  for (const [k, v] of out) out.set(k, v.sort(byElapsed(now)))
   return out
 }
 

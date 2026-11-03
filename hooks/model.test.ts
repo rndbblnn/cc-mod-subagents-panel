@@ -79,18 +79,20 @@ describe('tree', () => {
     ])
     expect(rows.map(r => `${r.depth}:${r.run.id}`)).toEqual(['0:o', '0:p', '1:b', '1:c'])
   })
-  test('siblings sort by ETA, longest first; no-ETA then finished below', async () => {
+  test('siblings sort by elapsed, longest first, finished or not', async () => {
     const rows = tree(
       [
-        run({ id: 'short', agentId: 'short', etaAt: 20_000 }),
-        run({ id: 'done', agentId: 'done', status: 'done', endedAt: 5_000 }),
-        run({ id: 'noeta', agentId: 'noeta', startedAt: 1 }),
-        run({ id: 'long', agentId: 'long', etaAt: 90_000 }),
-        run({ id: 'kid', agentId: 'kid', parentId: 'short', etaAt: 99_000 }),
+        run({ id: 'young', agentId: 'young', startedAt: 8_000, etaAt: 90_000 }),
+        run({ id: 'done', agentId: 'done', status: 'done', startedAt: 0, endedAt: 5_000 }),
+        run({ id: 'old', agentId: 'old', startedAt: 1_000 }),
+        run({ id: 'mid', agentId: 'mid', startedAt: 4_000 }),
+        run({ id: 'kid2', agentId: 'kid2', parentId: 'old', startedAt: 9_000 }),
+        run({ id: 'kid1', agentId: 'kid1', parentId: 'old', startedAt: 3_000 }),
       ],
       10_000,
     )
-    expect(rows.map(r => `${r.depth}:${r.run.id}`)).toEqual(['0:long', '0:short', '1:kid', '0:noeta', '0:done'])
+    // elapsed at 10 s: old 9, kid1 7, kid2 1, mid 6, done 5, young 2
+    expect(rows.map(r => `${r.depth}:${r.run.id}`)).toEqual(['0:old', '1:kid1', '1:kid2', '0:mid', '0:done', '0:young'])
   })
 })
 
