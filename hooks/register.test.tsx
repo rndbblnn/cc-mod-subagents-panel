@@ -144,11 +144,12 @@ test('an agent without the report tool reports with a PLAN line in its text', as
   expect(await ui.find({ type: 'Text', text: /ETA/ })).toBeTruthy()
   await ui.unmount()
 
-  // It finishes without closing its plan: the open todos show as unclosed, not as current or done.
+  // Its turn ends: it is idle, not finished (it may wait on background work or a message),
+  // so its plan stays as it was, the current todo still current.
   await $.turn.complete({ agentId: 'a1', reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1' } as never)
   const after = await $.ui.mount(PANE)
-  expect((await after.find({ type: 'Text', text: /patch outbox/ }))?.text).toMatch(/·\s+patch outbox/)
-  expect((await after.find({ type: 'Text', text: /run tests/ }))?.text).toMatch(/·\s+run tests/)
+  expect((await after.find({ type: 'Text', text: /patch outbox/ }))?.text).toMatch(/▸\s+patch outbox/)
+  expect(await after.find({ type: 'Text', text: '◌' })).toBeTruthy()
   await after.unmount()
 })
 

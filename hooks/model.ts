@@ -1,5 +1,5 @@
 // Pure logic for the panel: no `$`, so it is unit-tested directly.
-import type { Run, Todo, TodoStatus } from '../types'
+import type { Run, Todo, TodoStatus, RunStatus } from '../types'
 
 export const REPORT_TOOL = 'mcp__subagents-panel__report'
 
@@ -190,6 +190,8 @@ export function glyph(run: Run, now: number): string {
   switch (run.status) {
     case 'running':
       return SPIN[Math.floor(now / 100) % SPIN.length]
+    case 'idle':
+      return '◌'
     case 'done':
       return '✓'
     case 'failed':
@@ -201,6 +203,7 @@ export function glyph(run: Run, now: number): string {
 
 /** What the row says the agent is doing. */
 export function doing(run: Run): string {
+  if (run.status === 'idle') return run.note ? `waiting · ${run.note}` : 'waiting'
   if (run.status !== 'running') return run.status
   const active = run.todos.find(t => t.status === 'in_progress')
   return run.currentTool ?? active?.text ?? run.note ?? 'thinking…'
@@ -270,7 +273,7 @@ export function summary(runs: Run[]): string {
 /** Drops finished runs `keepMs` after they ended; 0 keeps them. Running ones always stay. */
 export function prune(runs: Run[], now: number, keepMs: number): Run[] {
   if (keepMs <= 0) return runs
-  return runs.filter(r => r.status === 'running' || r.status === 'failed' || r.endedAt === undefined || now - r.endedAt < keepMs)
+  return runs.filter(r => isLive(r) || r.status === 'failed' || r.endedAt === undefined || now - r.endedAt < keepMs)
 }
 
 /** 950 -> "950", 38_568 -> "38.6k", 1_234_567 -> "1.2M". */
@@ -295,7 +298,7 @@ export function stats(run: Run, now: number): { text: string; eta?: string; toke
 export function currentIndex(run: Run): number {
   const at = run.todos.findIndex(t => t.status === 'in_progress')
   if (at >= 0) return at
-  return run.status === 'running' ? run.todos.findIndex(t => t.status === 'pending') : -1
+  return isLive(run) ? run.todos.findIndex(t => t.status === 'pending') : -1
 }
 
 export type TodoMark = 'current' | 'done' | 'pending' | 'unclosed'
@@ -305,7 +308,7 @@ export type TodoMark = 'current' | 'done' | 'pending' | 'unclosed'
  * `unclosed`, drawn as such, never as done.
  */
 export function todoMarks(run: Run): TodoMark[] {
-  const live = run.status === 'running'
+  const live = isLive(run)
   const cur = live ? currentIndex(run) : -1
   return run.todos.map((t, i) => (i === cur ? 'current' : t.status === 'done' ? 'done' : live ? 'pending' : 'unclosed'))
 }
@@ -325,7 +328,7 @@ export function timeline(runs: Run[], archived: number): Timeline {
     const cur = currentIndex(r)
     r.todos.forEach((x, i) => {
       if (x.status === 'done') t.done++
-      else if (r.status !== 'running') return
+      else if (!isLive(r)) return
       else if (i === cur) t.current++
       else t.upcoming++
     })
@@ -433,16 +436,66 @@ export function blockHeight(run: Run, kids: Map<string | undefined, Run[]>, seen
  * an agent that ends a turn to wait for a background child resumes when the child
  * reports. Todos stay as the agent last reported them; a turn's end proves nothing about them.
  */
+/** Running or idle: not finished, may still act or be messaged. */
+export function isLive(run: Run): boolean {
+  return run.status === 'running' || run.status === 'idle'
+}
+
+/** One agent as `$.agent.list()` gives it: the fields `reconcile` reads. */
+export type LiveAgent = { id: string; status: string; type: string; description: string; parentId?: string }
+
+/**
+ * Lines the rows up with the engine's own list. `waiting`/`idle` makes a running row
+ * idle; ended statuses finish a live row; a live row the engine no longer lists is
+ * done. An agent the engine lists as not ended but that has no row gets one back
+ * (lost to an earlier prune or a reload), its clock starting now.
+ */
+export function reconcile(runs: Run[], live: LiveAgent[], at: number): Run[] {
+  const byId = new Map(live.map(a => [a.id, a]))
+  const end = (r: Run, status: RunStatus): Run => ({ ...r, status, endedAt: at, currentTool: undefined })
+  const out = runs.map((r): Run => {
+    if (!isLive(r) || !r.agentId) return r
+    const s = byId.get(r.agentId)?.status
+    if (s === undefined) return r.status === 'idle' ? end(r, 'done') : r
+    if (s === 'completed') return end(r, 'done')
+    if (s === 'failed') return end(r, 'failed')
+    if (s === 'killed') return end(r, 'stopped')
+    if ((s === 'waiting' || s === 'idle') && r.status === 'running') return { ...r, status: 'idle', currentTool: undefined }
+    return r
+  })
+  const known = new Set(runs.map(r => r.agentId ?? r.id))
+  for (const a of live) {
+    if (known.has(a.id) || ['completed', 'failed', 'killed'].includes(a.status)) continue
+    out.push({
+      id: a.id,
+      agentId: a.id,
+      parentId: a.parentId,
+      type: a.type || 'agent',
+      description: a.description,
+      model: '',
+      status: a.status === 'waiting' || a.status === 'idle' ? 'idle' : 'running',
+      startedAt: at,
+      toolCalls: 0,
+      todos: [],
+    })
+  }
+  return out
+}
+
 export function finishTurn(run: Run, reason: string, at: number, list: Run[]): Run {
   if (run.status !== 'running') return run
   const me = run.agentId ?? run.id
   const waiting = list.some(r => r.parentId === me && r.status === 'running')
   if (waiting) return { ...run, currentTool: undefined }
-  if (reason === 'answer') return { ...run, status: 'done', endedAt: at, currentTool: undefined }
+  // A normal turn end is not the end of the agent: it may wait on background work or for
+  // a message. Idle until the engine's list says completed (`reconcile`).
+  if (reason === 'answer') return { ...run, status: 'idle', currentTool: undefined }
   return { ...run, status: 'failed', failReason: reason, endedAt: at, currentTool: undefined }
 }
 
-/** Activity from an agent marked done or failed means its turn resumed: running again. Stopped stays stopped. */
+/** Activity from an idle, done or failed agent means its turn resumed: running again, same clock. Stopped stays stopped. */
 export function revive(run: Run): Run {
-  return run.status === 'done' || run.status === 'failed' ? { ...run, status: 'running', endedAt: undefined, failReason: undefined } : run
+  return run.status === 'idle' || run.status === 'done' || run.status === 'failed'
+    ? { ...run, status: 'running', endedAt: undefined, failReason: undefined }
+    : run
 }

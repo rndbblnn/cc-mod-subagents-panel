@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Run } from '../types'
-import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree, parsePlanLine, todoMarks, pingFor, nudgeDue, nudgeFor } from './model'
+import { applyReport, bar, clock, describeCall, dueForPing, etaLeft, progress, prune, finishTurn, revive, reconcile, isLive, glyph, doing, compact, shortModel, kidsOf, slotOf, blockHeight, attention, timeline, segments, labelGaps, currentIndex, rowHeight, stats, tree, parsePlanLine, todoMarks, pingFor, nudgeDue, nudgeFor } from './model'
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: 'a1',
@@ -234,12 +234,54 @@ describe('turn end', () => {
     const child = run({ id: 'k', agentId: 'k', parentId: 'p' })
     expect(finishTurn(parent, 'answer', 9, [parent, child]).status).toBe('running')
     const ended = finishTurn(parent, 'answer', 9, [parent])
-    expect(ended.status).toBe('done')
+    expect(ended.status).toBe('idle')
+    expect(ended.endedAt).toBeUndefined()
     expect(ended.todos).toEqual(parent.todos)
+    expect(finishTurn(parent, 'error', 9, [parent]).status).toBe('failed')
   })
-  test('activity revives done/failed, never stopped', async () => {
+  test('activity revives idle/done/failed with the same clock, never stopped', async () => {
     expect(revive(run({ status: 'done', endedAt: 5 })).status).toBe('running')
+    expect(revive(run({ status: 'idle', startedAt: 3 }))).toMatchObject({ status: 'running', startedAt: 3 })
     expect(revive(run({ status: 'stopped', endedAt: 5 })).status).toBe('stopped')
+  })
+})
+
+describe('idle agents', () => {
+  const todo = (text: string, status: 'pending' | 'in_progress' | 'done') => ({ text, status })
+  const live = (id: string, status: string, over: Record<string, unknown> = {}) => ({ id, status, type: 'general-purpose', description: id, ...over })
+
+  test('idle is live: never pruned, keeps its current todo, counts in the timeline', async () => {
+    const r = run({ id: 'i', agentId: 'i', status: 'idle', todos: [todo('a', 'done'), todo('b', 'pending')] })
+    expect(isLive(r)).toBe(true)
+    expect(prune([r], 1e9, 10)).toEqual([r])
+    expect(currentIndex(r)).toBe(1)
+    expect(todoMarks(r)).toEqual(['done', 'current'])
+    expect(timeline([r], 0)).toEqual({ done: 1, current: 1, upcoming: 0 })
+    expect(glyph(r, 0)).toBe('◌')
+    expect(doing(r)).toBe('waiting')
+    expect(doing({ ...r, note: 'polling CI' })).toBe('waiting · polling CI')
+  })
+
+  test('reconcile follows the engine: waiting/idle make a running row idle, ended statuses finish it', async () => {
+    const rows = [
+      run({ id: 'a', agentId: 'a' }),
+      run({ id: 'b', agentId: 'b' }),
+      run({ id: 'c', agentId: 'c', status: 'idle' }),
+      run({ id: 'd', agentId: 'd', status: 'idle' }),
+      run({ id: 'e', agentId: 'e' }),
+      run({ id: 'f', agentId: 'f', status: 'done', endedAt: 1 }),
+    ]
+    const out = reconcile(rows, [live('a', 'waiting'), live('b', 'running'), live('c', 'completed'), live('e', 'killed'), live('f', 'idle')], 50)
+    expect(out.map(r => r.status)).toEqual(['idle', 'running', 'done', 'done', 'stopped', 'done'])
+    expect(out[2]?.endedAt).toBe(50)
+    // An idle row the engine no longer lists is done; a running one is left to its turn end.
+    expect(reconcile([run({ id: 'x', agentId: 'x' })], [], 50)[0]?.status).toBe('running')
+  })
+
+  test('reconcile gives a row back to a live agent that lost it, never to an ended one', async () => {
+    const out = reconcile([run({ id: 'a', agentId: 'a' })], [live('a', 'running'), live('n', 'idle', { parentId: 'a' }), live('z', 'completed')], 70)
+    expect(out.map(r => r.agentId)).toEqual(['a', 'n'])
+    expect(out[1]).toMatchObject({ status: 'idle', parentId: 'a', startedAt: 70, type: 'general-purpose', todos: [] })
   })
 })
 

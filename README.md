@@ -72,6 +72,8 @@ Restart Claude Code. The next subagent opens the panel on the right.
 ✗ audit routes  failed · error    stays until /subagents clear
 ```
 
+A `◌` in place of the spinner means the agent is between turns, waiting on its own background work or for a message. It keeps its card until Claude Code reports it finished.
+
 <br clear="right">
 
 - **Sorted by ETA**, longest first, so what you're waiting on is always on top.
@@ -179,7 +181,7 @@ Set them in `/config`, or in `~/.claude/settings.json`:
 <summary><b>The panel didn't open by itself.</b></summary>
 <br>
 
-Your terminal is narrower than 144 columns. The status line shows `⚙ 2 subagents running · /subagents`; type `/subagents` and the panel opens at any width. After that, it opens by itself from 110 columns.
+Your terminal is narrower than 144 columns. The status line shows `⚙ 2 subagents: 2 running · /subagents`; type `/subagents` and the panel opens at any width. After that, it opens by itself from 110 columns.
 </details>
 
 <details>

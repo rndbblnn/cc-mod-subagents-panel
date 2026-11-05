@@ -2,7 +2,11 @@ export type TodoStatus = 'pending' | 'in_progress' | 'done'
 
 export type Todo = { text: string; status: TodoStatus }
 
-export type RunStatus = 'running' | 'done' | 'failed' | 'stopped'
+/**
+ * `idle`: between turns (waiting on its own background work or for a message), as the
+ * engine's `waiting`/`idle`. Not finished: never pruned, and a message wakes it.
+ */
+export type RunStatus = 'running' | 'idle' | 'done' | 'failed' | 'stopped'
 
 /** One subagent run as the panel tracks it. */
 export type Run = {

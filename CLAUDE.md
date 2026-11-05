@@ -64,6 +64,12 @@ status line entry ("N subagents running · /subagents"). `/subagents` (asked) se
   reached nobody and nothing said so.) Exception: `background` sends (timer pings) stay silent.
   In auto mode the classifier judges each send like a SendMessage call, and "gave no verdict"
   toasted every `pingSeconds` (seen 2026-11-03).
+- **A turn end is not the agent's end** (seen 2026-11-05: three long monitor agents, one row). An
+  agent that waits on a background poll or a message ends its turn and the engine lists it as
+  `waiting`/`idle`. So `finishTurn` makes a normal end `idle` (live, never pruned, `◌`), and the
+  5 s `reconcile` against `$.agent.list()` finishes it on `completed`, or gives a row back to a
+  listed agent that has none. Adding `idle` to `RunStatus` needed no shape bump: old values
+  are still valid.
 - Rows sort by `byElapsed(now)`: longest elapsed first, whatever the status (siblings too).
   The list fills from the top.
 - Nesting: at `agent.spawn` the child records the parent's current todo (`parentTodo`);

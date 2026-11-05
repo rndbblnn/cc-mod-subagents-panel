@@ -4,6 +4,8 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Run } from '../types'
 import {
   BRIEF,
+  isLive,
+  reconcile,
   pingFor,
   nudgeDue,
   nudgeFor,
@@ -54,10 +56,19 @@ const KEEP = 100
 
 const keyOf = (r: Run) => r.agentId ?? r.id
 
+/** The status line entry while any agent is live: "⚙ 1 subagent running, 2 idle · /subagents". */
+function statusLine(list: Run[]): string | undefined {
+  const running = list.filter(r => r.status === 'running').length
+  const idle = list.filter(r => r.status === 'idle').length
+  if (!running && !idle) return undefined
+  const parts = [running ? `${running} running` : '', idle ? `${idle} idle` : ''].filter(Boolean).join(', ')
+  return `⚙ ${running + idle} subagent${running + idle > 1 ? 's' : ''}: ${parts} · /subagents`
+}
+
 /** The bar: yellow while it runs, green once done, red if it failed; stopped draws dim. */
 const barColor = (r: Run) => (r.status === 'done' ? 'green' : r.status === 'failed' ? 'red' : 'yellow')
 const statusColor = (r: Run) =>
-  r.status === 'running' ? 'yellow' : r.status === 'done' ? 'green' : r.status === 'failed' ? 'red' : 'gray'
+  r.status === 'running' ? 'yellow' : r.status === 'idle' ? 'cyan' : r.status === 'done' ? 'green' : r.status === 'failed' ? 'red' : 'gray'
 
 /** Opens the pane; resolves whether a surface draws it now. */
 async function openPane($: EngineInterface, focus = false): Promise<boolean> {
@@ -223,28 +234,20 @@ export const register: Register = (on, options) => {
           }
           await update($, now, () => at)
         }
-        const running = list.filter(r => r.status === 'running').length
-        $.ui.status(running ? `⚙ ${running} subagent${running > 1 ? 's' : ''} running · /subagents` : undefined)
-        if (!running) return
+        $.ui.status(statusLine(list))
+        // Idle agents keep the clock going: their elapsed time grows and the engine may end them.
+        if (!list.some(isLive)) return
         await update($, now, () => at)
         if (++tick % 5 !== 0) return
         for (const r of dueForPing(list, at, pingMs)) {
           await patch($, r.agentId!, x => ({ ...x, lastPingAt: at }))
           await sendTo($, r, pingFor(r), 'Status ping', true)
         }
-        // Reconcile with the engine's own view: catches stops and kills we did not see.
+        // Reconcile with the engine's own view: idle agents, ends and kills we did not see,
+        // and agents that lost their row.
         try {
-          const live = new Map((await $.agent.list()).map(a => [a.id, a.status]))
-          await update($, runs, rs =>
-            rs.map((r): Run => {
-              const s = r.agentId ? live.get(r.agentId) : undefined
-              if (r.status !== 'running' || !s) return r
-              if (s === 'completed') return { ...r, status: 'done', endedAt: at, currentTool: undefined }
-              if (s === 'failed') return { ...r, status: 'failed', endedAt: at, currentTool: undefined }
-              if (s === 'killed') return { ...r, status: 'stopped', endedAt: at, currentTool: undefined }
-              return r
-            }),
-          )
+          const live = await $.agent.list()
+          await update($, runs, rs => reconcile(rs, live, at).slice(-KEEP))
         } catch {
           // Listing is best effort.
         }
@@ -271,9 +274,9 @@ export const register: Register = (on, options) => {
       return { text: 'Subagents panel opened.' }
     }
     if (arg === 'clear') {
-      const gone = (await read($, runs)).filter(r => r.status !== 'running')
+      const gone = (await read($, runs)).filter(r => !isLive(r))
       await update($, archived, n => n + doneTodos(gone))
-      await update($, runs, list => list.filter(r => r.status === 'running'))
+      await update($, runs, list => list.filter(isLive))
       await update($, selected, () => null)
       return { text: 'Finished subagents cleared.' }
     }
@@ -384,7 +387,7 @@ export const register: Register = (on, options) => {
     // pane shows one row more than `bodyRows`; with the status line up it shows exactly `bodyRows`.
     // Padding to the real height keeps the footer on the bottom edge without clipping its last row.
     // (`height="100%"` with a spacer does not work: the body has no fixed height.)
-    const statusShown = list.some(r => r.status === 'running')
+    const statusShown = statusLine(list) !== undefined
     const room = Math.max(4, (e.props.scroll?.bodyRows ?? 24) + (e.props.placement === 'dock' && !statusShown ? 1 : 0))
 
     const pick = sel ? list.find(r => keyOf(r) === sel) : undefined
@@ -437,13 +440,13 @@ export const register: Register = (on, options) => {
                 <Button key="view" label="open" hotkey="o" plain onPress={() => void viewRun($, pick.agentId, pick.type)} />
               )}
               {/* While its transcript is open, the prompt's Enter already goes to the agent. */}
-              {pick.status === 'running' && Input && viewing !== pick.agentId && (
+              {isLive(pick) && Input && viewing !== pick.agentId && (
                 <Button key="msg" label="message" hotkey="m" plain onPress={() => void update($, composing, () => true)} />
               )}
-              {pick.status === 'running' && (
+              {isLive(pick) && (
                 <Button key="ping" label="ask for ETA" hotkey="e" plain onPress={() => void sendTo($, pick, pingFor(pick), 'ETA request')} />
               )}
-              {pick.status === 'running' && (
+              {isLive(pick) && (
                 <Button key="stop" label="stop" hotkey="s" plain onPress={() => void stopRun($, pick)} />
               )}
             </Box>
