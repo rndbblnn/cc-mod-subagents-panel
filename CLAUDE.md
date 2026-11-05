@@ -45,7 +45,7 @@ names this build's API types file (`claude-code.d.ts`, ~14k lines — grep it, n
   still unseen live. Finished runs draw open todos as `unclosed` (`todoMarks`), never as done.
 
 ## Check
-`claude plugin validate . && claude plugin test .` (42 tests). Live: `claude --plugin-dir .`,
+`claude plugin validate . && claude plugin test .` (47 tests). Live: `claude --plugin-dir .`,
 spawn a couple of agents, click a row, try m / e / s.
 
 ## Pane seating (learned live, 2026-11-01)
